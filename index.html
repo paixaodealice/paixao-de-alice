@@ -316,6 +316,57 @@
     </div>
 
     <!-- Product list (grouped by category) -->
+    <!-- Clube da Alice — expandable info card -->
+    <div id="clube-info-card" class="mb-4" style="border:1px solid rgba(201,146,42,.3);border-radius:12px;overflow:hidden;background:linear-gradient(145deg,#1e1608,#120e04);">
+      <!-- Header — always visible, tap to expand -->
+      <div onclick="toggleClubeCard()" style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;cursor:pointer;">
+        <div style="display:flex;align-items:center;gap:.6rem;">
+          <span style="font-size:1.1rem;">⭐</span>
+          <div>
+            <p class="cinzel font-bold text-xs" style="color:var(--gold-lt);letter-spacing:.07em;">CLUBE DA ALICE</p>
+            <p class="text-xs" style="color:rgba(253,246,227,.4);">Programa de fidelidade · Toque para saber mais</p>
+          </div>
+        </div>
+        <span id="clube-card-chevron" style="color:var(--gold-lt);font-size:.8rem;transition:transform .2s;">▼</span>
+      </div>
+      <!-- Body — hidden by default -->
+      <div id="clube-card-body" class="hidden" style="border-top:1px solid rgba(201,146,42,.2);padding:1rem;">
+        <div style="display:flex;flex-direction:column;gap:.6rem;margin-bottom:.9rem;">
+          <div style="display:flex;gap:.6rem;align-items:flex-start;">
+            <span style="font-size:.9rem;flex-shrink:0;">💰</span>
+            <p class="text-xs" style="color:rgba(253,246,227,.7);">Compras acima de <strong style="color:var(--gold-lt);">R$ 35,00</strong> ganham 1 ponto</p>
+          </div>
+          <div style="display:flex;gap:.6rem;align-items:flex-start;">
+            <span style="font-size:.9rem;flex-shrink:0;">🎁</span>
+            <p class="text-xs" style="color:rgba(253,246,227,.7);">Acumule <strong style="color:var(--gold-lt);">5 pontos</strong> e ganhe seu produto favorito grátis</p>
+          </div>
+          <div style="display:flex;gap:.6rem;align-items:flex-start;">
+            <span style="font-size:.9rem;flex-shrink:0;">❤️</span>
+            <p class="text-xs" style="color:rgba(253,246,227,.7);">O brinde é o produto que você <strong style="color:var(--gold-lt);">mais pede</strong> — escolhido automaticamente</p>
+          </div>
+        </div>
+        <!-- Join section -->
+        <div id="clube-join-section">
+          <div class="gold-line mb-3"></div>
+          <p class="cinzel text-xs font-bold mb-2" style="color:var(--gold-lt);letter-spacing:.08em;">QUERO PARTICIPAR</p>
+          <div class="autocomplete-wrap mb-2">
+            <input id="clube-join-name" class="input-dark" placeholder="Digite seu nome…"
+              autocomplete="off" style="font-size:.85rem;"
+              oninput="onClubeJoinInput(this.value)"
+              onkeydown="if(event.key==='Enter') joinClube()" />
+            <div id="clube-join-autocomplete" class="autocomplete-list hidden"></div>
+          </div>
+          <button class="btn-gold w-full btn-sm" onclick="joinClube()">⭐ Entrar no Clube da Alice</button>
+        </div>
+        <!-- Already member section (shown after joining) -->
+        <div id="clube-member-msg" class="hidden text-center py-2">
+          <span style="font-size:1.2rem;">⭐</span>
+          <p class="cinzel font-bold text-xs mt-1" style="color:var(--gold-lt);">Você já é membro do Clube!</p>
+          <p class="text-xs mt-0.5" style="color:rgba(253,246,227,.4);" id="clube-member-detail"></p>
+        </div>
+      </div>
+    </div>
+
     <!-- Clube nudge — shown while cart is active -->
     <div id="clube-cart-nudge" class="hidden mb-4"></div>
 
@@ -845,7 +896,12 @@ window.addEventListener("firebase-ready", () => {
   });
   window._fb.watchClube(data => {
     clube = data || {};
-    if (isAdmin && document.getElementById("tab-crm")?.classList.contains("active")) renderCRM();
+    if (isAdmin) {
+      // Re-render clube tab whenever data updates
+      if (document.getElementById("tab-clube")?.classList.contains("active")) renderClube();
+      // Also refresh CRM if open (clube badges)
+      if (document.getElementById("tab-crm")?.classList.contains("active")) renderCRM();
+    }
   });
 });
 
@@ -2819,6 +2875,8 @@ function renderClube() {
     </div>`;
     return;
   }
+  // Debug: log members to console so we can verify they're loading
+  console.log("[Clube] Membros carregados:", members.length, members.map(m=>m.name||m.id));
 
   // Sort: resgate ready first, then by points desc
   members.sort((a,b) => {
@@ -3105,7 +3163,7 @@ function renderConfirmedClubeBlock(clientName, orderTotal) {
         <p class="text-xs" style="color:rgba(253,246,227,.6);">
           ${faltamResgate > 0
             ? `Faltam <strong style="color:var(--cream);">${faltamResgate} ponto${faltamResgate!==1?"s":""}</strong> para o seu brinde grátis.`
-            : `🎉 Você atingiu <strong style="color:#4ade80;">5 pontos</strong>! Fale com o Ivan para resgatar seu brinde.`}
+            : `🎉 Você atingiu <strong style="color:#4ade80;">5 pontos</strong>! Fale com a Alice para resgatar seu brinde.`}
         </p>
       </div>`;
   } else if (pontuou && !isMember) {
@@ -3115,7 +3173,7 @@ function renderConfirmedClubeBlock(clientName, orderTotal) {
         border-radius:10px;padding:.75rem 1rem;text-align:left;">
         <p class="cinzel font-bold text-xs mb-1" style="color:rgba(253,246,227,.45);">⭐ CLUBE DA ALICE</p>
         <p class="text-xs" style="color:rgba(253,246,227,.4);">
-          Esta compra qualificaria para 1 ponto no Clube. Peça à Ivan para te incluir! 🍬
+          Esta compra qualificaria para 1 ponto no Clube. Peça à Alice para te incluir! 🍬
         </p>
       </div>`;
   } else if (!pontuou) {
@@ -3139,6 +3197,102 @@ function editConfirmedOrder() {
   closeConfirmed();
   // Reopen cart so client can adjust
   openCart();
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// CLUBE — Client-side card (expandable info + join)
+// ══════════════════════════════════════════════════════════════════
+
+let _clubeCardOpen = false;
+
+function toggleClubeCard() {
+  _clubeCardOpen = !_clubeCardOpen;
+  const body    = document.getElementById("clube-card-body");
+  const chevron = document.getElementById("clube-card-chevron");
+  if (body)    body.classList.toggle("hidden", !_clubeCardOpen);
+  if (chevron) chevron.style.transform = _clubeCardOpen ? "rotate(180deg)" : "";
+  if (_clubeCardOpen) checkClubeNameField();
+}
+
+// Check if a name is already typed in reserveName and pre-fill
+function checkClubeNameField() {
+  const reserveInput = document.getElementById("reserveName");
+  const joinInput    = document.getElementById("clube-join-name");
+  if (reserveInput?.value.trim() && joinInput && !joinInput.value) {
+    joinInput.value = reserveInput.value.trim();
+    checkIfAlreadyMember(joinInput.value);
+  }
+}
+
+function onClubeJoinInput(val) {
+  // Autocomplete
+  const list  = document.getElementById("clube-join-autocomplete");
+  const query = val.trim().toLowerCase();
+  if (!query) { list.classList.add("hidden"); return; }
+  const matches = getKnownNames().filter(n => n.toLowerCase().includes(query));
+  if (!matches.length) { list.classList.add("hidden"); return; }
+  list.innerHTML = matches.slice(0,5).map(name =>
+    `<div class="autocomplete-item" onmousedown="
+      document.getElementById('clube-join-name').value='${esc(name)}';
+      document.getElementById('clube-join-autocomplete').classList.add('hidden');
+      checkIfAlreadyMember('${esc(name)}');">${name}</div>`
+  ).join("");
+  list.classList.remove("hidden");
+  checkIfAlreadyMember(val);
+}
+
+function checkIfAlreadyMember(name) {
+  const key = clubeKeyForName(name.trim());
+  const member = clube[key];
+  if (member) {
+    showClubeAlreadyMember(member);
+  } else {
+    document.getElementById("clube-join-section").style.opacity = "1";
+    document.getElementById("clube-member-msg").classList.add("hidden");
+    document.getElementById("clube-join-section").querySelector("button").style.display = "";
+  }
+}
+
+function showClubeAlreadyMember(member) {
+  document.getElementById("clube-join-section").querySelector("button").style.display = "none";
+  const msgEl  = document.getElementById("clube-member-msg");
+  const detEl  = document.getElementById("clube-member-detail");
+  const pontos = member.pontos || 0;
+  const faltam = Math.max(0, CLUBE_META_PONTOS - pontos);
+  msgEl.classList.remove("hidden");
+  detEl.textContent = pontos >= CLUBE_META_PONTOS
+    ? "🎉 Você atingiu 5 pontos! Fale com a Alice para resgatar."
+    : `${pontos} ponto${pontos!==1?"s":""} acumulado${pontos!==1?"s":""}. Faltam ${faltam} para o brinde grátis!`;
+}
+
+async function joinClube() {
+  const name = document.getElementById("clube-join-name").value.trim();
+  if (!name) { showToast("Digite seu nome para entrar no Clube 😊"); return; }
+  const key  = clubeKeyForName(name);
+  if (clube[key]) { checkIfAlreadyMember(name); return; }
+
+  const btn = document.querySelector('[onclick="joinClube()"]');
+  if (btn) { btn.disabled = true; btn.textContent = "Entrando…"; }
+
+  try {
+    const favProd = clubeFavProduct(name);
+    await window._fb.saveClubeMember(key, {
+      name, pontos: 0, lastActivity: Date.now(),
+      favProduct: favProd, resgatesTotal: 0
+    });
+    // Show success state
+    document.getElementById("clube-join-section").querySelector("button").style.display = "none";
+    const msgEl = document.getElementById("clube-member-msg");
+    const detEl = document.getElementById("clube-member-detail");
+    msgEl.classList.remove("hidden");
+    detEl.textContent = "Bem-vindo(a)! Faça compras acima de R$ 35 para acumular pontos. 🍬";
+    showToast(`⭐ ${name} entrou no Clube da Alice!`);
+  } catch(e) {
+    showToast("Erro ao entrar no Clube. Tente novamente.");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "⭐ Entrar no Clube da Alice"; }
+  }
 }
 
 </script>
