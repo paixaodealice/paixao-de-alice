@@ -316,6 +316,9 @@
     </div>
 
     <!-- Product list (grouped by category) -->
+    <!-- Clube nudge — shown while cart is active -->
+    <div id="clube-cart-nudge" class="hidden mb-4"></div>
+
     <div id="product-list">
       <div class="text-center py-10 text-sm" style="color:rgba(253,246,227,.3);">Carregando cardápio…</div>
     </div>
@@ -730,7 +733,13 @@
       <p class="text-xs" style="color:rgba(253,246,227,.5);">Efetue o pagamento na maquininha presencialmente.</p>
     </div>
 
-    <button class="btn-gold w-full" onclick="closeConfirmed()">✓ Fechar</button>
+    <!-- Clube status block -->
+    <div id="confirmed-clube-block" class="hidden mb-4"></div>
+
+    <div class="flex gap-3">
+      <button id="btn-edit-confirmed" class="btn-outline flex-1 hidden" onclick="editConfirmedOrder()">✏️ Editar pedido</button>
+      <button class="btn-gold flex-1" onclick="closeConfirmed()">✓ Fechar</button>
+    </div>
   </div>
 </div>
 
@@ -973,6 +982,9 @@ function updateCartUI() {
   } else {
     progressWrap.classList.add("hidden");
   }
+
+  // Clube nudge
+  updateClubeNudge();
 }
 
 function animateFab() {
@@ -2654,6 +2666,13 @@ function showConfirmedScreen(name, items, total, paymentMethod) {
   document.getElementById("confirmed-conta-block").classList.toggle("hidden",  paymentMethod !== "conta");
   document.getElementById("confirmed-card-block").classList.toggle("hidden",   paymentMethod !== "debito");
 
+  // Clube block
+  renderConfirmedClubeBlock(name, total);
+
+  // Edit button — only show if above threshold so user can adjust
+  const editBtn = document.getElementById("btn-edit-confirmed");
+  if (editBtn) editBtn.classList.toggle("hidden", total >= CLUBE_MIN_TICKET);
+
   document.getElementById("modal-confirmed").classList.remove("hidden");
 }
 
@@ -3004,6 +3023,122 @@ async function enrollFromCRM(name) {
   });
   showToast(`⭐ ${name} adicionado ao Clube!`);
   openCRMProfile(name); // refresh
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// CLUBE NUDGE — cart & confirmation screen
+// ══════════════════════════════════════════════════════════════════
+
+// Called every time cart total changes
+function updateClubeNudge() {
+  const nudgeEl = document.getElementById("clube-cart-nudge");
+  if (!nudgeEl) return;
+
+  const { total } = calcCartTotal();
+  const count = cartItemCount();
+
+  if (count === 0) { nudgeEl.classList.add("hidden"); return; }
+
+  const falta = CLUBE_MIN_TICKET - total;
+
+  if (total >= CLUBE_MIN_TICKET) {
+    // Already above threshold — show positive message
+    nudgeEl.classList.remove("hidden");
+    nudgeEl.innerHTML = `
+      <div style="background:linear-gradient(135deg,rgba(201,146,42,.15),rgba(201,146,42,.08));
+        border:1px solid rgba(201,146,42,.4);border-radius:10px;padding:.65rem 1rem;
+        display:flex;align-items:center;gap:.75rem;">
+        <span style="font-size:1.3rem;flex-shrink:0;">⭐</span>
+        <div>
+          <p class="cinzel font-bold text-xs" style="color:var(--gold-lt);">ESTA COMPRA PONTUA NO CLUBE!</p>
+          <p class="text-xs mt-0.5" style="color:rgba(253,246,227,.6);">
+            Compra acima de R$ 35,00 — você ganha 1 ponto se for membro do Clube da Alice.
+          </p>
+        </div>
+      </div>`;
+  } else {
+    // Below threshold — show how much is missing
+    nudgeEl.classList.remove("hidden");
+    nudgeEl.innerHTML = `
+      <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);
+        border-radius:10px;padding:.65rem 1rem;display:flex;align-items:center;gap:.75rem;">
+        <span style="font-size:1.3rem;flex-shrink:0;">⭐</span>
+        <div style="flex:1;">
+          <p class="cinzel font-bold text-xs" style="color:rgba(253,246,227,.55);">CLUBE DA ALICE</p>
+          <p class="text-xs mt-0.5" style="color:rgba(253,246,227,.45);">
+            Adicione mais
+            <strong style="color:var(--gold-lt);">R$ ${falta.toFixed(2).replace(".",",")}</strong>
+            em produtos para pontuar nesta compra.
+          </p>
+          <!-- Mini progress bar -->
+          <div style="height:4px;background:rgba(255,255,255,.07);border-radius:999px;margin-top:6px;overflow:hidden;">
+            <div style="height:100%;width:${Math.min(100,Math.round(total/CLUBE_MIN_TICKET*100))}%;
+              background:linear-gradient(90deg,var(--gold),var(--gold-lt));border-radius:999px;transition:width .3s;"></div>
+          </div>
+          <p style="font-size:.6rem;color:rgba(253,246,227,.3);margin-top:2px;">
+            R$ ${total.toFixed(2).replace(".",",")} / R$ ${CLUBE_MIN_TICKET.toFixed(2).replace(".",",")}
+          </p>
+        </div>
+      </div>`;
+  }
+}
+
+// Called after order is confirmed — shows in confirmed screen
+function renderConfirmedClubeBlock(clientName, orderTotal) {
+  const el = document.getElementById("confirmed-clube-block");
+  if (!el) return;
+
+  const key    = clubeKeyForName(clientName);
+  const member = clube[key];
+  const isMember = !!member && !clubeIsExpired(member);
+  const pontuou  = orderTotal >= CLUBE_MIN_TICKET;
+
+  if (pontuou && isMember) {
+    const newPts = (member.pontos || 0) + 1; // optimistic — already incremented
+    const faltamResgate = Math.max(0, CLUBE_META_PONTOS - newPts);
+    el.classList.remove("hidden");
+    el.innerHTML = `
+      <div style="background:linear-gradient(135deg,rgba(201,146,42,.15),rgba(201,146,42,.08));
+        border:1px solid rgba(201,146,42,.4);border-radius:10px;padding:.75rem 1rem;text-align:left;">
+        <p class="cinzel font-bold text-xs mb-1" style="color:var(--gold-lt);">⭐ +1 PONTO NO CLUBE!</p>
+        <p class="text-xs" style="color:rgba(253,246,227,.6);">
+          ${faltamResgate > 0
+            ? `Faltam <strong style="color:var(--cream);">${faltamResgate} ponto${faltamResgate!==1?"s":""}</strong> para o seu brinde grátis.`
+            : `🎉 Você atingiu <strong style="color:#4ade80;">5 pontos</strong>! Fale com o Ivan para resgatar seu brinde.`}
+        </p>
+      </div>`;
+  } else if (pontuou && !isMember) {
+    el.classList.remove("hidden");
+    el.innerHTML = `
+      <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);
+        border-radius:10px;padding:.75rem 1rem;text-align:left;">
+        <p class="cinzel font-bold text-xs mb-1" style="color:rgba(253,246,227,.45);">⭐ CLUBE DA ALICE</p>
+        <p class="text-xs" style="color:rgba(253,246,227,.4);">
+          Esta compra qualificaria para 1 ponto no Clube. Peça à Ivan para te incluir! 🍬
+        </p>
+      </div>`;
+  } else if (!pontuou) {
+    const falta = CLUBE_MIN_TICKET - orderTotal;
+    el.classList.remove("hidden");
+    el.innerHTML = `
+      <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);
+        border-radius:10px;padding:.75rem 1rem;text-align:left;">
+        <p class="cinzel font-bold text-xs mb-1" style="color:rgba(253,246,227,.4);">⭐ CLUBE DA ALICE</p>
+        <p class="text-xs" style="color:rgba(253,246,227,.4);">
+          Faltaram <strong style="color:var(--gold-lt);">R$ ${falta.toFixed(2).replace(".",",")}</strong> para pontuar nesta compra.
+        </p>
+      </div>`;
+  } else {
+    el.classList.add("hidden");
+  }
+}
+
+// Edit confirmed order — reopen cart from confirmation screen
+function editConfirmedOrder() {
+  closeConfirmed();
+  // Reopen cart so client can adjust
+  openCart();
 }
 
 </script>
