@@ -149,9 +149,16 @@
     .add-btn:hover    { opacity:.85; transform:scale(1.07); }
     .add-btn:disabled { opacity:.3; cursor:not-allowed; transform:none; background:#444; }
     /* Floating cart */
-    #cart-fab { position:fixed; bottom:1.25rem; left:50%; transform:translateX(-50%); z-index:80; background:linear-gradient(135deg,#E8B84B,#C9922A); color:#1A0F00; font-family:'Cinzel',serif; font-weight:700; font-size:.85rem; border:none; border-radius:999px; padding:.7rem 1.6rem; cursor:pointer; box-shadow:0 4px 24px rgba(201,146,42,.45); display:flex; align-items:center; gap:.6rem; transition:transform .2s,box-shadow .2s,opacity .2s; white-space:nowrap; }
-    #cart-fab:hover { transform:translateX(-50%) translateY(-2px); box-shadow:0 8px 32px rgba(201,146,42,.55); }
-    #cart-fab.hidden { opacity:0; pointer-events:none; transform:translateX(-50%) translateY(20px); }
+    /* FAB wrapper — holds nudge + cart button stacked */
+    #cart-fab-wrap { position:fixed; bottom:1.25rem; left:50%; transform:translateX(-50%); z-index:80; display:flex; flex-direction:column; align-items:center; gap:.45rem; pointer-events:none; }
+    #cart-fab-wrap.active { pointer-events:auto; }
+    /* Clube nudge pill — above FAB */
+    #clube-fab-nudge { background:rgba(14,10,3,.88); border:1px solid rgba(201,146,42,.45); border-radius:999px; padding:.35rem .85rem; font-size:.72rem; white-space:nowrap; backdrop-filter:blur(6px); transition:opacity .3s,transform .3s; opacity:0; transform:translateY(8px); pointer-events:none; max-width:calc(100vw - 2rem); text-align:center; }
+    #clube-fab-nudge.show { opacity:1; transform:translateY(0); }
+    /* Cart FAB button */
+    #cart-fab { background:linear-gradient(135deg,#E8B84B,#C9922A); color:#1A0F00; font-family:'Cinzel',serif; font-weight:700; font-size:.85rem; border:none; border-radius:999px; padding:.7rem 1.6rem; cursor:pointer; box-shadow:0 4px 24px rgba(201,146,42,.45); display:flex; align-items:center; gap:.6rem; transition:transform .2s,box-shadow .2s,opacity .2s; white-space:nowrap; opacity:0; transform:translateY(20px); pointer-events:none; }
+    #cart-fab.show { opacity:1; transform:translateY(0); pointer-events:auto; }
+    #cart-fab:hover { transform:translateY(-2px); box-shadow:0 8px 32px rgba(201,146,42,.55); }
     .cart-badge { background:#1A0F00; color:var(--gold-lt); border-radius:999px; width:22px; height:22px; display:flex; align-items:center; justify-content:center; font-size:.75rem; font-weight:900; }
     /* Promo banner */
     .promo-banner { background:linear-gradient(135deg,rgba(251,191,36,.1),rgba(201,146,42,.07)); border:1px solid rgba(251,191,36,.3); border-radius:10px; padding:.65rem 1rem; }
@@ -369,9 +376,6 @@
       </div>
     </div>
 
-    <!-- Clube nudge — shown while cart is active -->
-    <div id="clube-cart-nudge" class="hidden mb-4"></div>
-
     <div id="product-list">
       <div class="text-center py-10 text-sm" style="color:rgba(253,246,227,.3);">Carregando cardápio…</div>
     </div>
@@ -483,6 +487,14 @@
             <option value="normal">Produto normal</option>
             <option value="brigadeiro">🍬 Brigadeiro (promo kit 4 = R$15)</option>
           </select>
+          <select id="newProdCategory" class="input-dark" style="font-size:.85rem;" onchange="onCatalogCategoryChange('newProdCategory','newProdCustomCat')">
+            <option value="Brigadeiros">Brigadeiros</option>
+            <option value="Cones Trufados">Cones Trufados</option>
+            <option value="Brownies Recheados">Brownies Recheados</option>
+            <option value="Outros">Outros</option>
+            <option value="__custom__">✏️ Criar nova categoria…</option>
+          </select>
+          <input id="newProdCustomCat" class="input-dark hidden" placeholder="Nova categoria…" style="font-size:.85rem;" />
           <button id="btn-add-product" class="btn-gold w-full btn-sm" onclick="addProduct()">+ Adicionar ao Cardápio</button>
         </div>
       </div>
@@ -508,12 +520,14 @@
               <option value="brigadeiro">🍬 Brigadeiro</option>
             </select>
           </div>
-          <select id="newCatalogCategory" class="input-dark" style="font-size:.85rem;">
+          <select id="newCatalogCategory" class="input-dark" style="font-size:.85rem;" onchange="onCatalogCategoryChange('newCatalogCategory','newCatalogCustomCat')">
             <option value="Brigadeiros">Brigadeiros</option>
             <option value="Cones Trufados">Cones Trufados</option>
             <option value="Brownies Recheados">Brownies Recheados</option>
             <option value="Outros">Outros</option>
+            <option value="__custom__">✏️ Criar nova categoria…</option>
           </select>
+          <input id="newCatalogCustomCat" class="input-dark hidden" placeholder="Nova categoria…" style="font-size:.85rem;" />
           <button id="btn-add-catalog-item" class="btn-gold w-full btn-sm" onclick="addCatalogItem()">+ Adicionar ao Estoque</button>
         </div>
       </div>
@@ -703,11 +717,16 @@
 </main>
 
 <!-- ══ CARRINHO FLUTUANTE ══════════════════════════════════════════ -->
-<button id="cart-fab" class="hidden" onclick="openCart()">
-  <span>🛒 Ver Carrinho</span>
-  <span class="cart-badge" id="cart-count">0</span>
-  <span id="cart-fab-total" style="opacity:.8;font-size:.75rem;"></span>
-</button>
+<div id="cart-fab-wrap">
+  <!-- Clube nudge pill above the cart button -->
+  <div id="clube-fab-nudge"></div>
+  <!-- Cart FAB -->
+  <button id="cart-fab" onclick="openCart()">
+    <span>🛒 Ver Carrinho</span>
+    <span class="cart-badge" id="cart-count">0</span>
+    <span id="cart-fab-total" style="opacity:.8;font-size:.75rem;"></span>
+  </button>
+</div>
 
 <div id="toast"></div>
 
@@ -1047,14 +1066,17 @@ function cartDec(id) {
 
 function updateCartUI() {
   const count = cartItemCount();
-  const fab   = document.getElementById("cart-fab");
-  const badge = document.getElementById("cart-count");
-  const fabTotal = document.getElementById("cart-fab-total");
+  const fab     = document.getElementById("cart-fab");
+  const wrap    = document.getElementById("cart-fab-wrap");
+  const badge   = document.getElementById("cart-count");
+  const fabTotal= document.getElementById("cart-fab-total");
 
   if (count === 0) {
-    fab.classList.add("hidden");
+    fab.classList.remove("show");
+    if (wrap) wrap.classList.remove("active");
   } else {
-    fab.classList.remove("hidden");
+    fab.classList.add("show");
+    if (wrap) wrap.classList.add("active");
     badge.textContent = count;
     const { total } = calcCartTotal();
     fabTotal.textContent = `· R$ ${total.toFixed(2).replace(".",",")}`;
@@ -1503,7 +1525,12 @@ async function addProduct() {
   const btn = document.getElementById("btn-add-product");
   if (btn) { btn.disabled = true; btn.textContent = "Salvando…"; }
   try {
-    await window._fb.addProduct({ name, price, qty, type, category: type === "brigadeiro" ? "Brigadeiros" : "Outros" });
+    const catEl  = document.getElementById("newProdCategory");
+  const custEl = document.getElementById("newProdCustomCat");
+  const category = catEl?.value === "__custom__"
+    ? (custEl?.value.trim() || "Outros")
+    : (catEl?.value || (type === "brigadeiro" ? "Brigadeiros" : "Outros"));
+  await window._fb.addProduct({ name, price, qty, type, category });
     document.getElementById("newProdName").value  = "";
     document.getElementById("newProdPrice").value = "";
     document.getElementById("newProdQty").value   = "";
@@ -2685,7 +2712,7 @@ function editCatalogItem(id) {
   document.getElementById("edit-catalog-name").value     = c.name || "";
   document.getElementById("edit-catalog-price").value    = parseFloat(c.price||0).toFixed(2);
   document.getElementById("edit-catalog-type").value     = c.type || "normal";
-  document.getElementById("edit-catalog-category").value = c.category || "Outros";
+  setCategorySelect("edit-catalog-category","edit-catalog-custom-cat", c.category || "Outros");
   document.getElementById("modal-edit-catalog").classList.remove("hidden");
 }
 
@@ -2700,7 +2727,12 @@ async function saveEditCatalog() {
   const type     = document.getElementById("edit-catalog-type").value;
   const category = document.getElementById("edit-catalog-category").value;
   if (!name || isNaN(price) || price < 0) { showToast("Preencha nome e preço ⚠️"); return; }
-  await window._fb.setCatalogItem(id, { name, price, type, category });
+  const catSelEdit  = document.getElementById("edit-catalog-category");
+  const custInpEdit = document.getElementById("edit-catalog-custom-cat");
+  const finalCat    = catSelEdit?.value === "__custom__"
+    ? (custInpEdit?.value.trim() || "Outros")
+    : (category);
+  await window._fb.setCatalogItem(id, { name, price, type, category: finalCat });
   closeEditCatalogModal();
   showToast("✅ Produto atualizado no estoque!");
 }
@@ -2880,9 +2912,12 @@ async function checkAndAwardClubePoint(clientName, orderTotal) {
 
   if (!member) return; // not a member — admin must enroll manually
 
+  // Store pre-award value so confirmed screen shows correct remaining count
+  window._preAwardPontos = member.pontos || 0;
+
   // Check expiry
   if (clubeIsExpired(member)) {
-    // Reset expired points
+    window._preAwardPontos = 0;
     await window._fb.saveClubeMember(key, {
       ...member, pontos: 1, lastActivity: Date.now(),
       resgatesTotal: member.resgatesTotal || 0
@@ -3154,57 +3189,31 @@ async function enrollFromCRM(name) {
 // CLUBE NUDGE — cart & confirmation screen
 // ══════════════════════════════════════════════════════════════════
 
-// Called every time cart total changes
+// Called every time cart total changes — updates sticky FAB pill
 function updateClubeNudge() {
-  const nudgeEl = document.getElementById("clube-cart-nudge");
-  if (!nudgeEl) return;
+  const pill  = document.getElementById("clube-fab-nudge");
+  if (!pill) return;
 
   const { total } = calcCartTotal();
   const count = cartItemCount();
 
-  if (count === 0) { nudgeEl.classList.add("hidden"); return; }
+  if (count === 0) { pill.classList.remove("show"); pill.textContent = ""; return; }
 
   const falta = CLUBE_MIN_TICKET - total;
+  const pct   = Math.min(100, Math.round(total / CLUBE_MIN_TICKET * 100));
 
   if (total >= CLUBE_MIN_TICKET) {
-    // Already above threshold — show positive message
-    nudgeEl.classList.remove("hidden");
-    nudgeEl.innerHTML = `
-      <div style="background:linear-gradient(135deg,rgba(201,146,42,.15),rgba(201,146,42,.08));
-        border:1px solid rgba(201,146,42,.4);border-radius:10px;padding:.65rem 1rem;
-        display:flex;align-items:center;gap:.75rem;">
-        <span style="font-size:1.3rem;flex-shrink:0;">⭐</span>
-        <div>
-          <p class="cinzel font-bold text-xs" style="color:var(--gold-lt);">ESTA COMPRA PONTUA NO CLUBE!</p>
-          <p class="text-xs mt-0.5" style="color:rgba(253,246,227,.6);">
-            Compra acima de R$ 35,00 — você ganha 1 ponto se for membro do Clube da Alice.
-          </p>
-        </div>
-      </div>`;
+    pill.classList.add("show");
+    pill.innerHTML = `<span style="color:var(--gold-lt);">⭐ Esta compra pontua no Clube!</span>`;
   } else {
-    // Below threshold — show how much is missing
-    nudgeEl.classList.remove("hidden");
-    nudgeEl.innerHTML = `
-      <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);
-        border-radius:10px;padding:.65rem 1rem;display:flex;align-items:center;gap:.75rem;">
-        <span style="font-size:1.3rem;flex-shrink:0;">⭐</span>
-        <div style="flex:1;">
-          <p class="cinzel font-bold text-xs" style="color:rgba(253,246,227,.55);">CLUBE DA ALICE</p>
-          <p class="text-xs mt-0.5" style="color:rgba(253,246,227,.45);">
-            Adicione mais
-            <strong style="color:var(--gold-lt);">R$ ${falta.toFixed(2).replace(".",",")}</strong>
-            em produtos para pontuar nesta compra.
-          </p>
-          <!-- Mini progress bar -->
-          <div style="height:4px;background:rgba(255,255,255,.07);border-radius:999px;margin-top:6px;overflow:hidden;">
-            <div style="height:100%;width:${Math.min(100,Math.round(total/CLUBE_MIN_TICKET*100))}%;
-              background:linear-gradient(90deg,var(--gold),var(--gold-lt));border-radius:999px;transition:width .3s;"></div>
-          </div>
-          <p style="font-size:.6rem;color:rgba(253,246,227,.3);margin-top:2px;">
-            R$ ${total.toFixed(2).replace(".",",")} / R$ ${CLUBE_MIN_TICKET.toFixed(2).replace(".",",")}
-          </p>
-        </div>
-      </div>`;
+    pill.classList.add("show");
+    pill.innerHTML = `
+      <span style="color:rgba(253,246,227,.55);">⭐ Faltam </span>
+      <strong style="color:var(--gold-lt);">R$ ${falta.toFixed(2).replace(".",",")}</strong>
+      <span style="color:rgba(253,246,227,.45);"> para pontuar</span>
+      <span style="display:inline-block;vertical-align:middle;width:40px;height:3px;background:rgba(255,255,255,.1);border-radius:999px;margin-left:5px;overflow:hidden;">
+        <span style="display:block;height:100%;width:${pct}%;background:var(--gold);border-radius:999px;"></span>
+      </span>`;
   }
 }
 
@@ -3219,7 +3228,12 @@ function renderConfirmedClubeBlock(clientName, orderTotal) {
   const pontuou  = orderTotal >= CLUBE_MIN_TICKET;
 
   if (pontuou && isMember) {
-    const newPts = (member.pontos || 0) + 1; // optimistic — already incremented
+    // Read live pontos from clube[] — Firebase award may or may not have
+    // completed yet. We show what the member HAD before this order +1.
+    // To avoid race condition, we store pre-award value before saving.
+    // Use _preAwardPontos if set, otherwise fall back to member.pontos.
+    const prePontos     = (typeof window._preAwardPontos !== "undefined") ? window._preAwardPontos : (member.pontos || 0);
+    const newPts        = prePontos + 1;
     const faltamResgate = Math.max(0, CLUBE_META_PONTOS - newPts);
     el.classList.remove("hidden");
     el.innerHTML = `
@@ -3377,7 +3391,12 @@ async function addCatalogItem() {
   const btn = document.getElementById("btn-add-catalog-item");
   if (btn) { btn.disabled = true; btn.textContent = "Salvando…"; }
   try {
-    await window._fb.addCatalogItem({ name, price, type, category });
+    const catElNew  = document.getElementById("newCatalogCategory");
+    const custElNew = document.getElementById("newCatalogCustomCat");
+    const catalogCat = catElNew?.value === "__custom__"
+      ? (custElNew?.value.trim() || "Outros")
+      : (catElNew?.value || "Outros");
+    await window._fb.addCatalogItem({ name, price, type, category: catalogCat });
     document.getElementById("newCatalogName").value  = "";
     document.getElementById("newCatalogPrice").value = "";
     document.getElementById("newCatalogType").value  = "normal";
@@ -3491,6 +3510,40 @@ function shareWhatsAppSummary() {
 
   const waUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
   window.open(waUrl, "_blank");
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// CATEGORY HELPERS
+// ══════════════════════════════════════════════════════════════════
+
+// Show/hide custom category input when "Criar nova categoria" is selected
+function onCatalogCategoryChange(selectId, inputId) {
+  const sel = document.getElementById(selectId);
+  const inp = document.getElementById(inputId);
+  if (!sel || !inp) return;
+  if (sel.value === "__custom__") {
+    inp.classList.remove("hidden");
+    inp.focus();
+  } else {
+    inp.classList.add("hidden");
+  }
+}
+
+// Pre-fill category select from a stored value (handles custom values)
+function setCategorySelect(selectId, inputId, value) {
+  const sel = document.getElementById(selectId);
+  const inp = document.getElementById(inputId);
+  if (!sel || !inp) return;
+  const fixedOptions = ["Brigadeiros","Cones Trufados","Brownies Recheados","Outros"];
+  if (fixedOptions.includes(value)) {
+    sel.value = value;
+    inp.classList.add("hidden");
+  } else {
+    sel.value = "__custom__";
+    inp.value = value || "";
+    inp.classList.remove("hidden");
+  }
 }
 
 </script>
@@ -3612,12 +3665,14 @@ function shareWhatsAppSummary() {
       </div>
     </div>
     <label class="text-xs block mb-1" style="color:var(--gold-lt);letter-spacing:.08em;font-family:'Cinzel',serif;">CATEGORIA</label>
-    <select id="edit-catalog-category" class="input-dark mb-4">
+    <select id="edit-catalog-category" class="input-dark mb-2" onchange="onCatalogCategoryChange('edit-catalog-category','edit-catalog-custom-cat')">
       <option value="Brigadeiros">Brigadeiros</option>
       <option value="Cones Trufados">Cones Trufados</option>
       <option value="Brownies Recheados">Brownies Recheados</option>
       <option value="Outros">Outros</option>
+      <option value="__custom__">✏️ Criar nova categoria…</option>
     </select>
+    <input id="edit-catalog-custom-cat" class="input-dark mb-4 hidden" placeholder="Digite o nome da nova categoria" />
     <div class="flex gap-3">
       <button class="btn-outline flex-1 btn-sm" onclick="closeEditCatalogModal()">Cancelar</button>
       <button class="btn-gold flex-1 btn-sm" onclick="saveEditCatalog()">✓ Salvar</button>
