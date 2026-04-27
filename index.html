@@ -1402,9 +1402,13 @@ function switchAdminTab(tab) {
 // ── Admin: Reservas ────────────────────────────────────────────────────
 function renderOrders() {
   const el   = document.getElementById("orders-list");
-  // Filter to today only
+  // Filter to today only — exclude orders archived on previous days
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-  const keys = Object.keys(orders).filter(id => (orders[id].createdAt||0) >= todayStart.getTime());
+  const keys = Object.keys(orders).filter(id => {
+    const o = orders[id];
+    if ((o.createdAt||0) < todayStart.getTime()) return false; // not today
+    return true; // include today's (paid, conta, and newly archived today)
+  });
   if (!keys.length) {
     el.innerHTML = `<p class="text-sm text-center py-8" style="color:rgba(253,246,227,.3);">Nenhuma reserva hoje ainda. ☕</p>`;
     return;
@@ -2588,7 +2592,9 @@ function closeDayStep1() {
   const fmt = v => "R$ " + v.toFixed(2).replace(".",",");
   // Only today's orders
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-  const allOrders = Object.values(orders).filter(o => (o.createdAt||0) >= todayStart.getTime());
+  const allOrders = Object.values(orders).filter(o =>
+    (o.createdAt||0) >= todayStart.getTime() && !o.archivedDay
+  );
   const paid    = allOrders.filter(o => o.paid);
   const conta   = allOrders.filter(o => !o.paid);
   const totalPaid  = paid.reduce((s,o)  => s + parseFloat(o.total||o.productPrice||0), 0);
@@ -2644,8 +2650,10 @@ async function confirmCloseDay() {
 
     const todayStart = new Date(); todayStart.setHours(0,0,0,0);
     const allOrderEntries = Object.entries(orders);
-    // Only archive TODAY's paid orders; leave older conta orders untouched
-    const paidOrders  = allOrderEntries.filter(([,o]) => o.paid && (o.createdAt||0) >= todayStart.getTime());
+    // Only archive TODAY's paid orders that haven't been archived yet
+    const paidOrders  = allOrderEntries.filter(([,o]) =>
+      o.paid && (o.createdAt||0) >= todayStart.getTime() && !o.archivedDay
+    );
     const contaOrders = allOrderEntries.filter(([,o]) => !o.paid);
 
     // 1. Build snapshot for archive
@@ -2677,9 +2685,9 @@ async function confirmCloseDay() {
       paidOrders:   Object.fromEntries(paidOrders),
     });
 
-    // 2. Delete paid orders from active orders
+    // 2. Mark paid orders as archived (NOT deleted — must stay for Financeiro/CRM)
     for (const [id] of paidOrders) {
-      await window._fb.deleteOrder(id);
+      await window._fb.updateOrder(id, { archivedDay: dateKey, archivedAt: now });
     }
 
     // 3. Clear all products from today's menu
@@ -3482,7 +3490,9 @@ function renderArchiveDays() {
 function shareWhatsAppSummary() {
   const fmt = v => "R$ " + v.toFixed(2).replace(".", ",");
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-  const todayOrders = Object.values(orders).filter(o => (o.createdAt||0) >= todayStart.getTime());
+  const todayOrders = Object.values(orders).filter(o =>
+    (o.createdAt||0) >= todayStart.getTime()
+  );
 
   if (!todayOrders.length) { showToast("Nenhum pedido hoje ainda!"); return; }
 
