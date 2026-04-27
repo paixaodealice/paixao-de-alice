@@ -121,6 +121,8 @@
     .badge { font-size:.65rem; font-weight:700; letter-spacing:.05em; padding:2px 8px; border-radius:999px; display:inline-block; }
     .badge-in    { background:rgba(74,222,128,.12);  color:#4ade80; border:1px solid rgba(74,222,128,.3); }
     .badge-out   { background:rgba(239,68,68,.12);   color:#f87171; border:1px solid rgba(239,68,68,.3); }
+    .badge-low   { background:rgba(251,146,60,.15);  color:#fb923c; border:1px solid rgba(251,146,60,.4); animation:pulse-low 2s infinite; }
+    @keyframes pulse-low { 0%,100%{opacity:1} 50%{opacity:.65} }
     .badge-promo { background:rgba(251,191,36,.15);  color:#fbbf24; border:1px solid rgba(251,191,36,.4); }
     .badge-cat   { background:rgba(201,146,42,.12);  color:var(--gold-lt); border:1px solid var(--border); font-size:.6rem; letter-spacing:.07em; }
     .btn-gold { background:linear-gradient(135deg,#E8B84B,#C9922A); color:#1A0F00; font-family:'Cinzel',serif; font-weight:700; border-radius:8px; padding:.55rem 1.2rem; font-size:.82rem; letter-spacing:.06em; cursor:pointer; border:none; transition:opacity .2s,transform .15s; display:inline-flex; align-items:center; justify-content:center; gap:.35rem; }
@@ -435,6 +437,7 @@
       <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
         <h2 class="cinzel gold-text text-xl font-bold">Reservas do Dia</h2>
         <div class="flex items-center gap-2 flex-shrink-0">
+          <button id="btn-whatsapp-summary" class="btn-outline btn-sm" style="border-color:rgba(74,222,128,.4);color:#4ade80;font-size:.7rem;" onclick="shareWhatsAppSummary()">📲 Resumo WA</button>
           <button id="btn-close-day" class="btn-outline btn-sm" style="border-color:rgba(239,68,68,.4);color:#f87171;font-size:.7rem;" onclick="closeDayStep1()">🔒 Encerrar Dia</button>
           <div class="toggle-wrap">
           <label class="toggle">
@@ -491,8 +494,34 @@
     <!-- Estoque / Catálogo base -->
     <div id="admin-catalog" class="hidden">
       <h2 class="cinzel gold-text text-xl font-bold mb-1">Estoque Base</h2>
-      <p class="text-xs mb-4" style="color:rgba(253,246,227,.4);">Seus produtos fixos. No dia da venda, adicione-os ao cardápio com a quantidade disponível.</p>
-      <button id="btn-seed-catalog" class="btn-gold btn-sm mb-4" onclick="seedCatalog()">🌱 Carregar produtos padrão</button>
+      <p class="text-xs mb-3" style="color:rgba(253,246,227,.4);">Produtos fixos que você leva regularmente. Adicione ao cardápio do dia com a quantidade disponível.</p>
+
+      <!-- Add new catalog product -->
+      <div class="card p-4 mb-4">
+        <p class="cinzel text-xs font-bold mb-3" style="color:var(--gold-lt);letter-spacing:.08em;">+ CADASTRAR PRODUTO NO ESTOQUE</p>
+        <div class="flex flex-col gap-2">
+          <input id="newCatalogName" class="input-dark" placeholder="Nome do produto" style="font-size:.85rem;" />
+          <div class="grid grid-cols-2 gap-2">
+            <input id="newCatalogPrice" type="number" step="0.01" min="0" class="input-dark" placeholder="Preço R$" style="font-size:.85rem;" />
+            <select id="newCatalogType" class="input-dark" style="font-size:.85rem;">
+              <option value="normal">Normal</option>
+              <option value="brigadeiro">🍬 Brigadeiro</option>
+            </select>
+          </div>
+          <select id="newCatalogCategory" class="input-dark" style="font-size:.85rem;">
+            <option value="Brigadeiros">Brigadeiros</option>
+            <option value="Cones Trufados">Cones Trufados</option>
+            <option value="Brownies Recheados">Brownies Recheados</option>
+            <option value="Outros">Outros</option>
+          </select>
+          <button id="btn-add-catalog-item" class="btn-gold w-full btn-sm" onclick="addCatalogItem()">+ Adicionar ao Estoque</button>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between mb-3 gap-2">
+        <h3 class="cinzel text-xs font-bold" style="color:var(--gold-lt);letter-spacing:.08em;">PRODUTOS CADASTRADOS</h3>
+        <button id="btn-seed-catalog" class="btn-outline btn-sm" style="font-size:.68rem;" onclick="seedCatalog()">🌱 Carregar padrão</button>
+      </div>
       <div id="catalog-list" class="flex flex-col gap-2"></div>
     </div>
 
@@ -506,6 +535,7 @@
         <button class="fin-tab active cinzel text-xs font-bold px-2 py-2 flex-1" id="fin-tab-hist"     onclick="switchFinTab('hist')">📅 Histórico</button>
         <button class="fin-tab cinzel text-xs font-bold px-2 py-2 flex-1"        id="fin-tab-pending"  onclick="switchFinTab('pending')">⏳ Pendências</button>
         <button class="fin-tab cinzel text-xs font-bold px-2 py-2 flex-1"        id="fin-tab-clients"  onclick="switchFinTab('clients')">👤 Clientes</button>
+        <button class="fin-tab cinzel text-xs font-bold px-2 py-2 flex-1"        id="fin-tab-archive"  onclick="switchFinTab('archive')">📁 Encerrados</button>
       </div>
 
       <!-- ── Histórico ── -->
@@ -578,6 +608,14 @@
             oninput="renderClientes()" />
         </div>
         <div id="fin-clients-list" class="flex flex-col gap-2"></div>
+      </div>
+
+      <!-- ── Dias Encerrados ── -->
+      <div id="fin-archive-view" class="hidden">
+        <h3 class="cinzel gold-text text-base font-bold mb-1">Dias Encerrados</h3>
+        <p class="text-xs mb-4" style="color:rgba(253,246,227,.4);">Histórico dos dias já encerrados manualmente</p>
+        <div id="fin-archive-kpis" class="grid grid-cols-2 gap-3 mb-4"></div>
+        <div id="fin-archive-list" class="flex flex-col gap-2"></div>
       </div>
     </div>
 
@@ -968,8 +1006,8 @@ function renderProducts() {
             <div class="flex items-center gap-2 mt-0.5 flex-wrap">
               <span style="color:var(--gold);font-size:.82rem;">R$ ${price.toFixed(2).replace(".",",")}</span>
               ${isBrig ? `<span class="badge badge-promo">kit 4 = R$15</span>` : ""}
-              <span class="badge ${avail ? 'badge-in' : 'badge-out'}">
-                ${avail ? `${p.qty} disp.` : 'Esgotado'}
+              <span class="badge ${avail ? (p.qty <= 2 ? 'badge-low' : 'badge-in') : 'badge-out'}">
+                ${avail ? (p.qty <= 2 ? `⚠️ Últimas ${p.qty}!` : `${p.qty} disp.`) : 'Esgotado'}
               </span>
             </div>
           </div>
@@ -1639,7 +1677,7 @@ function filterOrders() {
 // ── Sub-tab switcher ──────────────────────────────────────────────────────
 function switchFinTab(tab) {
   currentFinTab = tab;
-  ["hist","pending","clients"].forEach(t => {
+  ["hist","pending","clients","archive"].forEach(t => {
     const tabBtn = document.getElementById("fin-tab-" + t);
     if (tabBtn) tabBtn.classList.toggle("active", t === tab);
   });
@@ -1649,6 +1687,7 @@ function switchFinTab(tab) {
   if (tab === "hist")    renderFinanceiro();
   if (tab === "pending") renderPendencias();
   if (tab === "clients") renderClientes();
+  if (tab === "archive") renderArchiveDays();
 }
 
 // ── Period switcher ───────────────────────────────────────────────────────
@@ -2102,6 +2141,12 @@ function watchMaquininhaState() {
   // Watch settings in its own dedicated node
   window._fb.watchSettings(data => {
     if (data) applyMaquininhaState(!!data.maquininhaOn);
+  });
+  window._fb.watchArchive(data => {
+    window._archiveData = data || {};
+    if (isAdmin && document.getElementById("fin-tab-archive")?.classList.contains("active")) {
+      renderArchiveDays();
+    }
   });
 }
 
@@ -2916,7 +2961,19 @@ function renderClube() {
           <p class="text-xs mt-0.5" style="color:rgba(253,246,227,.4);">
             ❤ ${esc(favProd)} · última compra: ${lastStr}
           </p>
-          ${m.resgatesTotal ? `<p class="text-xs" style="color:var(--gold-dk);">✓ ${m.resgatesTotal} resgate${m.resgatesTotal!==1?'s':''} anteriores</p>` : ""}
+          ${m.resgatesTotal ? `
+        <details style="margin-top:2px;">
+          <summary style="font-size:.7rem;color:var(--gold-dk);cursor:pointer;list-style:none;display:flex;align-items:center;gap:4px;">
+            ✓ ${m.resgatesTotal} resgate${m.resgatesTotal!==1?'s':''} ▾
+          </summary>
+          <div style="margin-top:4px;">
+            ${(m.resgateHistory||[]).slice().reverse().map(r =>
+              `<div style="font-size:.68rem;color:rgba(253,246,227,.4);padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05);">
+                ${new Date(r.date).toLocaleDateString('pt-BR')} — ${esc(r.produto||'')}
+              </div>`
+            ).join('')}
+          </div>
+        </details>` : ""}
         </div>
       </div>
 
@@ -3008,11 +3065,20 @@ async function confirmarResgate() {
   const btn = document.getElementById("btn-confirmar-resgate");
   if (btn) { btn.disabled = true; btn.textContent = "Salvando…"; }
   const m = clube[_resgateClientId];
+  // Build resgate history entry
+  const resgateEntry = {
+    date:    Date.now(),
+    produto: m.favProduct || clubeFavProduct(m.name||""),
+    pontos:  m.pontos || 0
+  };
+  const resgateHistory = [...(m.resgateHistory||[]), resgateEntry];
+
   await window._fb.saveClubeMember(_resgateClientId, {
     ...m,
-    pontos:        0,
-    lastActivity:  Date.now(),
-    resgatesTotal: (m.resgatesTotal||0) + 1
+    pontos:         0,
+    lastActivity:   Date.now(),
+    resgatesTotal:  (m.resgatesTotal||0) + 1,
+    resgateHistory: resgateHistory
   });
   closeResgateModal();
   showToast("🎉 Resgate confirmado! Pontos zerados.");
@@ -3293,6 +3359,138 @@ async function joinClube() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "⭐ Entrar no Clube da Alice"; }
   }
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// IMPROVEMENT 1 — Add item to catalog base
+// ══════════════════════════════════════════════════════════════════
+async function addCatalogItem() {
+  const name     = document.getElementById("newCatalogName").value.trim();
+  const price    = parseFloat(document.getElementById("newCatalogPrice").value);
+  const type     = document.getElementById("newCatalogType").value;
+  const category = document.getElementById("newCatalogCategory").value;
+  if (!name || isNaN(price) || price < 0) { showToast("Preencha nome e preço ⚠️"); return; }
+  // Check duplicate
+  const exists = Object.values(catalog).find(c => c.name.toLowerCase() === name.toLowerCase());
+  if (exists) { showToast("Produto já existe no estoque!"); return; }
+  const btn = document.getElementById("btn-add-catalog-item");
+  if (btn) { btn.disabled = true; btn.textContent = "Salvando…"; }
+  try {
+    await window._fb.addCatalogItem({ name, price, type, category });
+    document.getElementById("newCatalogName").value  = "";
+    document.getElementById("newCatalogPrice").value = "";
+    document.getElementById("newCatalogType").value  = "normal";
+    document.getElementById("newCatalogCategory").value = "Brigadeiros";
+    showToast("✅ Produto adicionado ao estoque!");
+  } catch(e) {
+    showToast("❌ Erro ao salvar. Verifique o Firebase.");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "+ Adicionar ao Estoque"; }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// IMPROVEMENT 2 — Dias Encerrados archive view
+// ══════════════════════════════════════════════════════════════════
+function renderArchiveDays() {
+  const fmt   = v => "R$ " + v.toFixed(2).replace(".", ",");
+  // archive is loaded via watchArchive — we need to add that watcher
+  // For now read from window._archiveData if available
+  const archiveData = window._archiveData || {};
+  const days = Object.entries(archiveData).sort((a,b) =>
+    (b[1].closedAt||0) - (a[1].closedAt||0)
+  );
+
+  const kpiEl = document.getElementById("fin-archive-kpis");
+  if (kpiEl) {
+    const totalDays    = days.length;
+    const totalRevenue = days.reduce((s,[,d]) => s + (d.totalFaturado||0), 0);
+    kpiEl.innerHTML = `
+      <div class="stat-card py-2">
+        <p class="text-xs cinzel mb-0.5" style="color:var(--gold-lt);font-size:.6rem;letter-spacing:.06em;">DIAS ENCERRADOS</p>
+        <p class="text-xl font-bold cinzel gold-text">${totalDays}</p>
+      </div>
+      <div class="stat-card py-2">
+        <p class="text-xs cinzel mb-0.5" style="color:var(--gold-lt);font-size:.6rem;letter-spacing:.06em;">TOTAL HISTÓRICO</p>
+        <p class="text-xl font-bold cinzel gold-text">${fmt(totalRevenue)}</p>
+      </div>`;
+  }
+
+  const listEl = document.getElementById("fin-archive-list");
+  if (!listEl) return;
+  if (!days.length) {
+    listEl.innerHTML = `<p class="text-sm text-center py-8" style="color:rgba(253,246,227,.3);">Nenhum dia encerrado ainda.</p>`;
+    return;
+  }
+
+  listEl.innerHTML = days.map(([id, d]) => {
+    const dateStr = d.date || new Date(d.closedAt||0).toLocaleDateString("pt-BR");
+    const weekday = d.closedAt ? new Date(d.closedAt).toLocaleDateString("pt-BR",{weekday:"long"}) : "";
+    const topProds = Object.entries(d.topProducts||{})
+      .sort((a,b)=>b[1]-a[1]).slice(0,3)
+      .map(([k,v]) => `${k.replace(/_/g," ")} ×${v}`).join(", ");
+
+    return `
+    <div class="card p-4 mb-1">
+      <div class="flex items-start justify-between gap-2 mb-3">
+        <div>
+          <p class="cinzel font-bold text-sm" style="color:var(--cream);">${dateStr}</p>
+          <p class="text-xs" style="color:rgba(253,246,227,.4);">${weekday} · ${d.ordersCount||0} pedido${(d.ordersCount||0)!==1?"s":""}</p>
+        </div>
+        <p class="cinzel font-bold gold-text">${fmt(d.totalFaturado||0)}</p>
+      </div>
+      <div class="grid grid-cols-2 gap-2 mb-3">
+        <div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.2);border-radius:8px;padding:.5rem .75rem;">
+          <p style="font-size:.6rem;color:#4ade80;font-family:'Cinzel',serif;letter-spacing:.06em;">RECEBIDO</p>
+          <p class="cinzel font-bold" style="color:#4ade80;font-size:.9rem;">${fmt(d.totalPaid||0)}</p>
+          <p style="font-size:.65rem;color:rgba(253,246,227,.3);">${d.paidCount||0} pedidos</p>
+        </div>
+        <div style="background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.2);border-radius:8px;padding:.5rem .75rem;">
+          <p style="font-size:.6rem;color:#a78bfa;font-family:'Cinzel',serif;letter-spacing:.06em;">NA CONTA</p>
+          <p class="cinzel font-bold" style="color:#a78bfa;font-size:.9rem;">${fmt(d.totalConta||0)}</p>
+          <p style="font-size:.65rem;color:rgba(253,246,227,.3);">${d.contaCount||0} pedidos</p>
+        </div>
+      </div>
+      ${topProds ? `<p class="text-xs" style="color:rgba(253,246,227,.4);">🏆 Mais vendidos: ${topProds}</p>` : ""}
+    </div>`;
+  }).join("");
+}
+
+// ══════════════════════════════════════════════════════════════════
+// IMPROVEMENT 4 — WhatsApp day summary
+// ══════════════════════════════════════════════════════════════════
+function shareWhatsAppSummary() {
+  const fmt = v => "R$ " + v.toFixed(2).replace(".", ",");
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  const todayOrders = Object.values(orders).filter(o => (o.createdAt||0) >= todayStart.getTime());
+
+  if (!todayOrders.length) { showToast("Nenhum pedido hoje ainda!"); return; }
+
+  const totalPaid   = todayOrders.filter(o=>o.paid).reduce((s,o)=>s+parseFloat(o.total||o.productPrice||0),0);
+  const totalConta  = todayOrders.filter(o=>!o.paid).reduce((s,o)=>s+parseFloat(o.total||o.productPrice||0),0);
+  const totalGeral  = totalPaid + totalConta;
+  const today       = new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"});
+
+  // Top 3 products
+  const prodCount = {};
+  todayOrders.forEach(o => {
+    const items = o.items||(o.productName?[{productName:o.productName,qty:o.qty||1}]:[]);
+    items.forEach(i => { prodCount[i.productName]=(prodCount[i.productName]||0)+i.qty; });
+  });
+  const top3 = Object.entries(prodCount).sort((a,b)=>b[1]-a[1]).slice(0,3)
+    .map(([n,q],i)=>`${["🥇","🥈","🥉"][i]} ${n} (${q}x)`).join("\n");
+
+  const msg = `🍬 *Paixão de Alice — Resumo do Dia*\n`
+    + `📅 ${today}\n\n`
+    + `💰 *Faturado:* ${fmt(totalGeral)}\n`
+    + `✅ *Recebido:* ${fmt(totalPaid)} (${todayOrders.filter(o=>o.paid).length} pedidos)\n`
+    + `📒 *Na conta:* ${fmt(totalConta)} (${todayOrders.filter(o=>!o.paid).length} pedidos)\n\n`
+    + `🏆 *Mais vendidos:*\n${top3}\n\n`
+    + `📦 *Total de pedidos:* ${todayOrders.length}`;
+
+  const waUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+  window.open(waUrl, "_blank");
 }
 
 </script>
