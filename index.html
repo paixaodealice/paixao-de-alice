@@ -3630,7 +3630,7 @@ async function saveRetroOrder() {
   if (!name)          { showToast("Informe o nome do cliente ⚠️"); return; }
   if (!dateVal)       { showToast("Informe a data do pedido ⚠️"); return; }
   if (_retroItems.length === 0) { showToast("Adicione ao menos 1 item ao pedido ⚠️"); return; }
-  const items = _retroItems.map(i => `${i.name} ×${i.qty}`).join(", ");
+  const itemsLabel = _retroItems.map(i => `${i.name} ×${i.qty}`).join(", ");
   const total = parseFloat(document.getElementById("retro-total").value) || _retroItems.reduce((s,i)=>s+i.price*i.qty,0);
   if (total <= 0) { showToast("Adicione itens para calcular o total ⚠️"); return; }
 
@@ -3652,7 +3652,7 @@ async function saveRetroOrder() {
                      })),
       total,
       productPrice:  total,
-      productName:   items,
+      productName:   itemsLabel,
       paymentMethod: status === "paid" ? "pix" : "conta",
       paymentStatus: status === "paid" ? "pending" : "conta",
       paid:          status === "paid",
