@@ -441,6 +441,7 @@
       <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
         <h2 class="cinzel gold-text text-xl font-bold">Reservas do Dia</h2>
         <div class="flex items-center gap-2 flex-shrink-0">
+          <button class="btn-outline btn-sm" style="border-color:rgba(201,146,42,.4);color:var(--gold-lt);font-size:.7rem;" onclick="openRetroModal(null)">📋 + Pedido</button>
           <button id="btn-whatsapp-summary" class="btn-outline btn-sm" style="border-color:rgba(74,222,128,.4);color:#4ade80;font-size:.7rem;" onclick="shareWhatsAppSummary()">📲 Resumo WA</button>
           <button id="btn-close-day" class="btn-outline btn-sm" style="border-color:rgba(239,68,68,.4);color:#f87171;font-size:.7rem;" onclick="closeDayStep1()">🔒 Encerrar Dia</button>
           <div class="toggle-wrap">
@@ -627,8 +628,8 @@
       <!-- ── Dias Encerrados ── -->
       <div id="fin-archive-view" class="hidden">
         <h3 class="cinzel gold-text text-base font-bold mb-1">Dias Encerrados</h3>
-        <p class="text-xs mb-4" style="color:rgba(253,246,227,.4);">Histórico dos dias já encerrados manualmente</p>
-        <div id="fin-archive-kpis" class="grid grid-cols-2 gap-3 mb-4"></div>
+        <p class="text-xs mb-3" style="color:rgba(253,246,227,.4);">Histórico dos dias já encerrados manualmente</p>
+        <div id="fin-archive-kpis" class="grid grid-cols-2 gap-3 mb-3"></div>
         <div id="fin-archive-list" class="flex flex-col gap-2"></div>
       </div>
     </div>
@@ -673,7 +674,10 @@
 
     <!-- ── CRM Individual (modal-like panel) ── -->
     <div id="crm-profile" class="hidden fade-up">
-      <button class="btn-outline btn-sm mb-4" onclick="closeCRMProfile()">← Voltar ao CRM</button>
+      <div class="flex gap-2 mb-4">
+    <button class="btn-outline btn-sm flex-1" onclick="closeCRMProfile()">← Voltar ao CRM</button>
+    <button class="btn-outline btn-sm flex-1" style="border-color:rgba(201,146,42,.4);color:var(--gold-lt);font-size:.72rem;" onclick="openRetroModal(document.getElementById('crm-profile-content').dataset.client)">📋 Pedido retroativo</button>
+  </div>
       <div id="crm-profile-content"></div>
     </div>
 
@@ -2475,6 +2479,7 @@ function openCRMProfile(name) {
   // Orders sorted desc
   const sortedOrders = [...c.orders].sort((a, b) => (b.createdAt||0) - (a.createdAt||0));
 
+  document.getElementById("crm-profile-content").dataset.client = c.name;
   document.getElementById("crm-profile-content").innerHTML = `
     <!-- Header -->
     <div class="card p-4 mb-4">
@@ -3480,6 +3485,12 @@ function renderArchiveDays() {
         </div>
       </div>
       ${topProds ? `<p class="text-xs" style="color:rgba(253,246,227,.4);">🏆 Mais vendidos: ${topProds}</p>` : ""}
+      ${d.paidOrders && Object.keys(d.paidOrders).length > 0 ? `
+      <div class="gold-line mt-3 mb-2"></div>
+      <button class="btn-outline btn-sm w-full" style="font-size:.7rem;"
+        onclick="restoreArchivedOrders('${id}')">
+        🔄 Restaurar ${Object.keys(d.paidOrders).length} pedido${Object.keys(d.paidOrders).length!==1?'s':''} para o sistema
+      </button>` : ""}
     </div>`;
   }).join("");
 }
@@ -3553,6 +3564,148 @@ function setCategorySelect(selectId, inputId, value) {
     sel.value = "__custom__";
     inp.value = value || "";
     inp.classList.remove("hidden");
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// PEDIDO RETROATIVO + RESTAURAÇÃO DO ARQUIVO
+// ══════════════════════════════════════════════════════════════════
+
+// ── Open retro modal ──────────────────────────────────────────────
+function openRetroModal(clientName) {
+  // Pre-fill today's date
+  const today = new Date();
+  const yyyy  = today.getFullYear();
+  const mm    = String(today.getMonth()+1).padStart(2,"0");
+  const dd    = String(today.getDate()).padStart(2,"0");
+  document.getElementById("retro-date").value  = `${yyyy}-${mm}-${dd}`;
+  document.getElementById("retro-client").value = clientName || "";
+  document.getElementById("retro-items").value  = "";
+  document.getElementById("retro-total").value  = "";
+  document.getElementById("retro-obs").value    = "";
+  document.getElementById("retro-paid").checked = true;
+  document.getElementById("retro-autocomplete").classList.add("hidden");
+  document.getElementById("modal-retro-order").classList.remove("hidden");
+  setTimeout(() => {
+    const inp = document.getElementById(clientName ? "retro-items" : "retro-client");
+    if (inp) inp.focus();
+  }, 100);
+}
+
+function closeRetroModal() {
+  document.getElementById("modal-retro-order").classList.add("hidden");
+}
+
+function onRetroClientInput(val) {
+  const list  = document.getElementById("retro-autocomplete");
+  const query = val.trim().toLowerCase();
+  if (!query) { list.classList.add("hidden"); return; }
+  const matches = getKnownNames().filter(n => n.toLowerCase().includes(query));
+  if (!matches.length) { list.classList.add("hidden"); return; }
+  list.innerHTML = matches.slice(0,6).map(name =>
+    `<div class="autocomplete-item" onmousedown="
+      document.getElementById('retro-client').value='${esc(name)}';
+      document.getElementById('retro-autocomplete').classList.add('hidden');">${name}</div>`
+  ).join("");
+  list.classList.remove("hidden");
+}
+
+async function saveRetroOrder() {
+  const name     = document.getElementById("retro-client").value.trim();
+  const dateVal  = document.getElementById("retro-date").value;
+  const items    = document.getElementById("retro-items").value.trim();
+  const total    = parseFloat(document.getElementById("retro-total").value);
+  const obs      = document.getElementById("retro-obs").value.trim();
+  const statusEl = document.querySelector('input[name="retro-status"]:checked');
+  const status   = statusEl ? statusEl.value : "paid";
+
+  if (!name)          { showToast("Informe o nome do cliente ⚠️"); return; }
+  if (!dateVal)       { showToast("Informe a data do pedido ⚠️"); return; }
+  if (!items)         { showToast("Descreva os itens do pedido ⚠️"); return; }
+  if (isNaN(total) || total <= 0) { showToast("Informe o valor total ⚠️"); return; }
+
+  const btn = document.getElementById("btn-save-retro");
+  if (btn) { btn.disabled = true; btn.textContent = "Salvando…"; }
+
+  try {
+    // Build timestamp from selected date (noon to avoid timezone issues)
+    const [y, m, d] = dateVal.split("-").map(Number);
+    const ts = new Date(y, m-1, d, 12, 0, 0).getTime();
+
+    await window._fb.addOrder({
+      collaborator:  name,
+      obs:           obs || null,
+      items:         [{ productName: items, qty: 1, unitPrice: total }],
+      total,
+      productPrice:  total,
+      productName:   items,
+      paymentMethod: status === "paid" ? "pix" : "conta",
+      paymentStatus: status === "paid" ? "pending" : "conta",
+      paid:          status === "paid",
+      isRetroactive: true,
+      createdAt:     ts,
+      cartSessionId: `retro_${Date.now()}`
+    });
+
+    // Award clube point if eligible
+    if (status === "paid" && total >= CLUBE_MIN_TICKET) {
+      await checkAndAwardClubePoint(name, total);
+    }
+
+    closeRetroModal();
+    showToast(`✅ Pedido retroativo de ${name} salvo!`);
+
+    // Refresh CRM if open
+    if (!document.getElementById("crm-profile").classList.contains("hidden")) {
+      openCRMProfile(name);
+    }
+  } catch(e) {
+    showToast("❌ Erro ao salvar: " + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "✓ Salvar Pedido"; }
+  }
+}
+
+// ── Restore archived orders back to /orders ───────────────────────
+async function restoreArchivedOrders(archiveId) {
+  const archiveDay = window._archiveData?.[archiveId];
+  if (!archiveDay?.paidOrders) {
+    showToast("Nenhum pedido encontrado neste arquivo.");
+    return;
+  }
+
+  const paidOrders = archiveDay.paidOrders;
+  const count = Object.keys(paidOrders).length;
+
+  if (!confirm(`Restaurar ${count} pedido${count!==1?"s":""} do dia ${archiveDay.date} para o sistema?\n\nEles aparecerão no Financeiro e no CRM de cada cliente.`)) return;
+
+  const btn = event?.target;
+  if (btn) { btn.disabled = true; btn.textContent = "Restaurando…"; }
+
+  try {
+    let restored = 0;
+    for (const [, order] of Object.entries(paidOrders)) {
+      // Check if order already exists (avoid duplicates via cartSessionId)
+      if (order.cartSessionId) {
+        const duplicate = Object.values(orders).find(o => o.cartSessionId === order.cartSessionId);
+        if (duplicate) continue; // already restored
+      }
+      // Re-insert with archivedDay flag so it doesn't show in today's reservations
+      await window._fb.addOrder({
+        ...order,
+        archivedDay:  archiveDay.date,
+        archivedAt:   archiveDay.closedAt,
+        restoredAt:   Date.now(),
+        isRestored:   true
+      });
+      restored++;
+    }
+    showToast(`✅ ${restored} pedido${restored!==1?"s":""} restaurado${restored!==1?"s":""}! Já aparecem no Financeiro e CRM.`);
+    if (btn) { btn.disabled = false; btn.textContent = `✅ ${restored} restaurado${restored!==1?"s":""}`; }
+  } catch(e) {
+    showToast("❌ Erro ao restaurar: " + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = "🔄 Tentar novamente"; }
   }
 }
 
@@ -3722,6 +3875,56 @@ function setCategorySelect(selectId, inputId, value) {
     <div class="flex gap-3">
       <button class="btn-outline flex-1 btn-sm" onclick="closeResgateModal()">Cancelar</button>
       <button class="btn-gold flex-1 btn-sm" onclick="confirmarResgate()" id="btn-confirmar-resgate">✓ Entreguei o brinde</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══ MODAL: PEDIDO RETROATIVO ══════════════════════════════════ -->
+<div id="modal-retro-order" class="modal-overlay modal-overlay-center hidden">
+  <div class="modal-box" style="max-width:440px;max-height:90vh;overflow-y:auto;">
+    <h3 class="cinzel gold-text text-lg font-bold mb-1">📋 Pedido Retroativo</h3>
+    <p class="text-xs mb-3" style="color:rgba(253,246,227,.4);">Insira manualmente um pedido que não está no sistema</p>
+    <div class="gold-line mb-4"></div>
+
+    <label class="text-xs block mb-1" style="color:var(--gold-lt);letter-spacing:.08em;font-family:'Cinzel',serif;">CLIENTE *</label>
+    <div class="autocomplete-wrap mb-3">
+      <input id="retro-client" class="input-dark" placeholder="Nome do cliente"
+        autocomplete="off" oninput="onRetroClientInput(this.value)" style="font-size:.85rem;" />
+      <div id="retro-autocomplete" class="autocomplete-list hidden"></div>
+    </div>
+
+    <label class="text-xs block mb-1" style="color:var(--gold-lt);letter-spacing:.08em;font-family:'Cinzel',serif;">DATA DO PEDIDO *</label>
+    <input id="retro-date" type="date" class="input-dark mb-3" style="font-size:.85rem;" />
+
+    <label class="text-xs block mb-1" style="color:var(--gold-lt);letter-spacing:.08em;font-family:'Cinzel',serif;">DESCRIÇÃO DOS ITENS *</label>
+    <input id="retro-items" class="input-dark mb-3" placeholder="Ex: Brigadeiro de Ninho ×3, Cone Trufado Café" style="font-size:.85rem;" />
+
+    <label class="text-xs block mb-1" style="color:var(--gold-lt);letter-spacing:.08em;font-family:'Cinzel',serif;">VALOR TOTAL (R$) *</label>
+    <input id="retro-total" type="number" step="0.01" min="0" class="input-dark mb-3" placeholder="0,00" style="font-size:.85rem;" />
+
+    <label class="text-xs block mb-2" style="color:var(--gold-lt);letter-spacing:.08em;font-family:'Cinzel',serif;">STATUS</label>
+    <div class="flex gap-3 mb-3">
+      <label class="flex items-center gap-2 cursor-pointer text-sm flex-1 card p-2">
+        <input type="radio" name="retro-status" id="retro-paid" value="paid" checked style="accent-color:#4ade80;" />
+        <span style="color:#4ade80;">✓ Pago</span>
+      </label>
+      <label class="flex items-center gap-2 cursor-pointer text-sm flex-1 card p-2">
+        <input type="radio" name="retro-status" id="retro-conta" value="conta" style="accent-color:#a78bfa;" />
+        <span style="color:#a78bfa;">📒 Na Conta</span>
+      </label>
+    </div>
+
+    <label class="text-xs block mb-1" style="color:var(--gold-lt);letter-spacing:.08em;font-family:'Cinzel',serif;">OBSERVAÇÃO (opcional)</label>
+    <input id="retro-obs" class="input-dark mb-4" placeholder="Alguma observação?" style="font-size:.85rem;" />
+
+    <div class="promo-banner mb-4" style="border-color:rgba(251,191,36,.3);">
+      <p class="text-xs" style="color:rgba(253,246,227,.55);">⚠️ Este pedido será contabilizado no Financeiro e no CRM do cliente com a data informada.</p>
+    </div>
+
+    <div class="flex gap-3">
+      <button class="btn-outline flex-1 btn-sm" onclick="closeRetroModal()">Cancelar</button>
+      <button class="btn-gold flex-1 btn-sm" id="btn-save-retro" onclick="saveRetroOrder()">✓ Salvar Pedido</button>
     </div>
   </div>
 </div>
