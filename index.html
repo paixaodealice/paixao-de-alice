@@ -596,6 +596,15 @@
             <p class="text-xs mt-1" style="color:rgba(253,246,227,.35);" id="fin-pending-count"></p>
           </div>
         </div>
+        <!-- Pending detail — shown when card is clicked -->
+        <div id="fin-pending-detail" class="hidden mb-4">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="cinzel text-xs font-bold" style="color:#fbbf24;letter-spacing:.09em;">⏳ PENDENTES NO PERÍODO</h3>
+            <button onclick="toggleFinPendingDetail()" class="text-xs" style="color:rgba(253,246,227,.4);background:none;border:none;cursor:pointer;">✕ Fechar</button>
+          </div>
+          <div id="fin-pending-detail-list" class="flex flex-col gap-2"></div>
+        </div>
+
         <!-- Agrupado por dia -->
         <h3 class="cinzel text-xs font-bold mb-2" style="color:var(--gold-lt);letter-spacing:.09em;">POR DIA</h3>
         <div id="fin-by-day" class="flex flex-col gap-2 mb-4"></div>
@@ -1372,12 +1381,7 @@ function checkAdmin() {
     document.getElementById("view-client").classList.add("hidden");
     document.getElementById("view-admin").classList.remove("hidden");
     renderOrders(); renderAdminProducts(); renderCatalogList(); renderFinanceiro(); populateCatalogSelect(); renderClube();
-    // Seed 27/04 orders — runs once, self-disables via localStorage
-    setTimeout(() => {
-      if (window._fb && !localStorage.getItem("seed_27abr_done")) {
-        seedPedidos27().catch(e => console.error("[Seed 27/04]", e));
-      }
-    }, 2000);
+
   } else {
     document.getElementById("admin-error").classList.remove("hidden");
   }
@@ -1414,11 +1418,9 @@ function renderOrders() {
   const el   = document.getElementById("orders-list");
   // Filter to today only — exclude orders archived on previous days
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-  const keys = Object.keys(orders).filter(id => {
-    const o = orders[id];
-    if ((o.createdAt||0) < todayStart.getTime()) return false; // not today
-    return true; // include today's (paid, conta, and newly archived today)
-  });
+  const keys = Object.keys(orders).filter(id =>
+    (orders[id].createdAt||0) >= todayStart.getTime()
+  );
   if (!keys.length) {
     el.innerHTML = `<p class="text-sm text-center py-8" style="color:rgba(253,246,227,.3);">Nenhuma reserva hoje ainda. ☕</p>`;
     return;
@@ -2604,7 +2606,7 @@ function closeDayStep1() {
   // Only today's orders
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
   const allOrders = Object.values(orders).filter(o =>
-    (o.createdAt||0) >= todayStart.getTime() && !o.archivedDay
+    (o.createdAt||0) >= todayStart.getTime()
   );
   const paid    = allOrders.filter(o => o.paid);
   const conta   = allOrders.filter(o => !o.paid);
@@ -2655,23 +2657,20 @@ async function confirmCloseDay() {
   if (btn) { btn.disabled = true; btn.textContent = "Encerrando…"; }
 
   try {
-    const now   = Date.now();
-    const today = new Date(now);
-    const dateKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
-
+    const now        = Date.now();
+    const today      = new Date(now);
+    const dateKey    = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
     const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+
     const allOrderEntries = Object.entries(orders);
-    // Only archive TODAY's paid orders that haven't been archived yet
     const paidOrders  = allOrderEntries.filter(([,o]) =>
-      o.paid && (o.createdAt||0) >= todayStart.getTime() && !o.archivedDay
+      o.paid && (o.createdAt||0) >= todayStart.getTime()
     );
     const contaOrders = allOrderEntries.filter(([,o]) => !o.paid);
 
-    // 1. Build snapshot for archive
+    // Build snapshot for archive (read-only record — orders are NOT modified)
     const totalPaid  = paidOrders.reduce((s,[,o])  => s + parseFloat(o.total||o.productPrice||0), 0);
     const totalConta = contaOrders.reduce((s,[,o]) => s + parseFloat(o.total||o.productPrice||0), 0);
-
-    // Count products sold — sanitize keys for Firebase (no . # $ / [ ])
     const sanitizeKey = k => String(k||"").replace(/[.#$\/\[\]]/g, "_").trim() || "produto";
     const prodCount = {};
     allOrderEntries.forEach(([,o]) => {
@@ -2682,6 +2681,7 @@ async function confirmCloseDay() {
       });
     });
 
+    // Save snapshot to /archive
     await window._fb.pushArchiveDay({
       date:         dateKey,
       closedAt:     now,
@@ -2692,23 +2692,17 @@ async function confirmCloseDay() {
       paidCount:    paidOrders.length,
       contaCount:   contaOrders.length,
       topProducts:  prodCount,
-      // Store paid orders inline for history
-      paidOrders:   Object.fromEntries(paidOrders),
     });
 
-    // 2. Mark paid orders as archived (NOT deleted — must stay for Financeiro/CRM)
-    for (const [id] of paidOrders) {
-      await window._fb.updateOrder(id, { archivedDay: dateKey, archivedAt: now });
-    }
-
-    // 3. Clear all products from today's menu
+    // ONLY clear today's cardápio — orders are NEVER touched.
+    // Display cleans itself at midnight via the todayStart filter.
     const productIds = Object.keys(products);
     for (const id of productIds) {
       await window._fb.deleteProduct(id);
     }
 
     closeModalCloseDay();
-    showToast(`✅ Dia encerrado! ${paidOrders.length} pedidos arquivados.`);
+    showToast(`✅ Dia encerrado! Cardápio zerado.`);
     renderOrders();
     renderAdminProducts();
 
@@ -3621,7 +3615,7 @@ function onRetroClientInput(val) {
 async function saveRetroOrder() {
   const name     = document.getElementById("retro-client").value.trim();
   const dateVal  = document.getElementById("retro-date").value;
-  const items    = document.getElementById("retro-items").value.trim();
+  // items are built from _retroItems array (item-by-item builder)
 
   const obs      = document.getElementById("retro-obs").value.trim();
   const statusEl = document.querySelector('input[name="retro-status"]:checked');
@@ -3826,109 +3820,6 @@ document.addEventListener("keydown", function(e) {
 // ══════════════════════════════════════════════════════════════════
 // SEED PEDIDOS 27/04 — run once then self-disables
 // ══════════════════════════════════════════════════════════════════
-const SEED_27_KEY = "seed_27abr_done";
-
-async function seedPedidos27() {
-  if (localStorage.getItem(SEED_27_KEY)) return; // already seeded
-
-  const ts27 = new Date(2025, 3, 27, 12, 0, 0).getTime(); // 27 Apr 2025 noon
-
-  const pedidos = [
-    {
-      collaborator: "Dani",
-      items: [
-        { productName: "Bolo de Pote Maracujá",         qty: 1, unitPrice: 20.00 },
-        { productName: "Cone Trufado Doce de Leite",    qty: 1, unitPrice: 13.00 },
-      ],
-      total: 33.00
-    },
-    {
-      collaborator: "Aurea",
-      items: [
-        { productName: "Cone Trufado Café",             qty: 1, unitPrice: 13.00 },
-      ],
-      total: 13.00
-    },
-    {
-      collaborator: "Giovanna Mara",
-      items: [
-        { productName: "Brownie Recheado Maracujá",     qty: 1, unitPrice: 7.00 },
-      ],
-      total: 7.00
-    },
-    {
-      collaborator: "Andressa",
-      items: [
-        { productName: "Bolo de Pote Chocolate",        qty: 1, unitPrice: 20.00 },
-      ],
-      total: 20.00
-    },
-    {
-      collaborator: "Marcelli",
-      items: [
-        { productName: "Bolo de Pote Cenoura e Chocolate", qty: 1, unitPrice: 20.00 },
-      ],
-      total: 20.00
-    },
-    {
-      collaborator: "Monalisa",
-      items: [
-        { productName: "Beijinho",                      qty: 1, unitPrice: 4.50 },
-      ],
-      total: 4.50
-    },
-    {
-      collaborator: "Thomas",
-      items: [
-        { productName: "Brigadeiro de Ninho com Nutella", qty: 1, unitPrice: 4.50 },
-        { productName: "Brigadeiro Meio Amargo",          qty: 2, unitPrice: 4.50 },
-        { productName: "Casadinho",                       qty: 1, unitPrice: 4.50 },
-      ],
-      total: 15.00 // kit de 4 brigadeiros
-    },
-    {
-      collaborator: "Gustavo Machado",
-      items: [
-        { productName: "Brigadeiro de Ferrero Rocher",  qty: 4, unitPrice: 4.50 },
-      ],
-      total: 15.00 // kit de 4 brigadeiros
-    },
-  ];
-
-  for (const p of pedidos) {
-    await window._fb.addOrder({
-      collaborator:  p.collaborator,
-      obs:           null,
-      items:         p.items,
-      total:         p.total,
-      productPrice:  p.total,
-      productName:   p.items.map(i=>`${i.productName} ×${i.qty}`).join(", "),
-      paymentMethod: "pix",
-      paymentStatus: "pending",
-      paid:          true,
-      archivedDay:   "2025-04-27",
-      archivedAt:    ts27,
-      isRetroactive: true,
-      createdAt:     ts27,
-      cartSessionId: `seed27_${p.collaborator.replace(/\s/g,"_")}`
-    });
-  }
-
-  localStorage.setItem(SEED_27_KEY, "1");
-  console.log("[Seed 27/04] ✅ 8 pedidos inseridos com sucesso.");
-}
-
-// Auto-run seed when admin logs in (safe — checks flag first)
-const _origCheckAdmin = checkAdmin;
-checkAdmin = function() {
-  _origCheckAdmin();
-  // Run seed after login if admin
-  setTimeout(() => {
-    if (window._fb && !localStorage.getItem(SEED_27_KEY)) {
-      seedPedidos27().catch(e => console.error("[Seed 27/04] Erro:", e));
-    }
-  }, 2000);
-};
 
 </script>
 
