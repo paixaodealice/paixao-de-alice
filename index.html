@@ -305,11 +305,16 @@
       <div class="flex-1">
         <p class="cinzel font-bold text-sm" style="color:#fbbf24;">PROMOÇÃO BRIGADEIROS</p>
         <p class="text-xs mt-0.5" style="color:rgba(253,246,227,.65);">
-          1 un. = <strong style="color:var(--cream);">R$ 4,50</strong>
+          🍬 Brigadeiro: <strong style="color:var(--cream);">R$ 4,50 un.</strong>
           &nbsp;·&nbsp; Kit 4 = <strong style="color:#4ade80;">R$ 15,00</strong>
-          <span style="color:rgba(253,246,227,.35);"> (economia R$ 3,00)</span>
+          <span style="color:rgba(253,246,227,.35);"> (ec. R$ 3,00)</span>
         </p>
-        <p class="text-xs mt-1" style="color:rgba(253,246,227,.4);">Sabores diferentes contam para o kit! Adicione ao carrinho e o desconto é aplicado automaticamente.</p>
+        <p class="text-xs mt-0.5" style="color:rgba(253,246,227,.65);">
+          🍇 Surpresa de Uva: <strong style="color:var(--cream);">R$ 5,00 un.</strong>
+          &nbsp;·&nbsp; Kit 4 = <strong style="color:#4ade80;">R$ 18,00</strong>
+          <span style="color:rgba(253,246,227,.35);"> (ec. R$ 2,00)</span>
+        </p>
+        <p class="text-xs mt-1" style="color:rgba(253,246,227,.4);">Kits por tipo — desconto aplicado automaticamente no carrinho.</p>
 
         <!-- Kit progress (aparece quando há brigadeiros no carrinho) -->
         <div id="kit-progress-wrap" class="hidden mt-2">
@@ -487,6 +492,7 @@
           <select id="newProdType" class="input-dark" style="font-size:.85rem;">
             <option value="normal">Produto normal</option>
             <option value="brigadeiro">🍬 Brigadeiro (promo kit 4 = R$15)</option>
+            <option value="brigadeiro_uva">🍇 Surpresa de Uva (promo kit 4 = R$18)</option>
           </select>
           <select id="newProdCategory" class="input-dark" style="font-size:.85rem;" onchange="onCatalogCategoryChange('newProdCategory','newProdCustomCat')">
             <option value="Brigadeiros">Brigadeiros</option>
@@ -519,6 +525,7 @@
             <select id="newCatalogType" class="input-dark" style="font-size:.85rem;">
               <option value="normal">Normal</option>
               <option value="brigadeiro">🍬 Brigadeiro</option>
+              <option value="brigadeiro_uva">🍇 Surpresa de Uva</option>
             </select>
           </div>
           <select id="newCatalogCategory" class="input-dark" style="font-size:.85rem;" onchange="onCatalogCategoryChange('newCatalogCategory','newCatalogCustomCat')">
@@ -898,6 +905,11 @@
 // ── Constantes ──────────────────────────────────────────────────────
 const ADMIN_PASSWORD = "admin123";
 // ── Clube da Alice ────────────────────────────────────────────────
+// ── Surpresa de Uva kit ──────────────────────────────────────────
+const UVA_PRICE_UNIT = 5.00;
+const UVA_KIT_QTY   = 4;
+const UVA_KIT_PRICE  = 18.00;
+
 const CLUBE_MIN_TICKET  = 35.00;  // R$ mínimo por compra para pontuar
 const CLUBE_META_PONTOS = 5;      // pontos para resgatar brinde
 const CLUBE_EXPIRY_DAYS = 45;     // dias sem comprar para expirar
@@ -977,6 +989,7 @@ window.addEventListener("firebase-ready", () => {
 
 // ── Cálculo de preço (carrinho global) ───────────────────────────────
 function isBrigadeiro(p) { return p && p.type === "brigadeiro"; }
+function isUva(p)        { return p && p.type === "brigadeiro_uva"; }
 
 // Calcula o total do carrinho aplicando promo cross-sabor
 function calcCartTotal() {
@@ -992,7 +1005,20 @@ function calcCartTotal() {
   const kits  = Math.floor(totalBrig / PROMO_QTY);
   const resto = totalBrig % PROMO_QTY;
   const brigTotal = (kits * PROMO_KIT) + (resto * PRICE_UNIT);
-  return { total: brigTotal + totalOther, brigTotal, totalBrig, kits, resto, totalOther };
+
+  // Surpresa de Uva — kit próprio separado
+  let totalUva = 0;
+  let uvaTotal = 0;
+  Object.entries(cart).forEach(([id, qty]) => {
+    const p = products[id];
+    if (!p || !isUva(p)) return;
+    totalUva += qty;
+  });
+  const uvaKits  = Math.floor(totalUva / UVA_KIT_QTY);
+  const uvaResto = totalUva % UVA_KIT_QTY;
+  uvaTotal = (uvaKits * UVA_KIT_PRICE) + (uvaResto * UVA_PRICE_UNIT);
+
+  return { total: brigTotal + uvaTotal + totalOther, brigTotal, totalBrig, kits, resto, totalOther, uvaTotal, totalUva, uvaKits, uvaResto };
 }
 
 function cartItemCount() {
@@ -1028,8 +1054,9 @@ function renderProducts() {
     ${items.map((p, i) => {
       const avail   = p.qty > 0;
       const inCart  = cart[p.id] || 0;
-      const isBrig  = isBrigadeiro(p);
-      const price   = isBrig ? PRICE_UNIT : parseFloat(p.price);
+      const isBrig    = isBrigadeiro(p);
+      const isUvaProd = isUva(p);
+      const price     = isBrig ? PRICE_UNIT : isUvaProd ? UVA_PRICE_UNIT : parseFloat(p.price);
       return `
       <div class="card p-3 mb-2 fade-up" style="animation-delay:${i*0.04}s">
         <div class="flex items-center gap-3">
@@ -1037,7 +1064,8 @@ function renderProducts() {
             <p class="cinzel font-bold text-sm gold-text">${esc(p.name)}</p>
             <div class="flex items-center gap-2 mt-0.5 flex-wrap">
               <span style="color:var(--gold);font-size:.82rem;">R$ ${price.toFixed(2).replace(".",",")}</span>
-              ${isBrig ? `<span class="badge badge-promo">kit 4 = R$15</span>` : ""}
+              ${isBrig    ? `<span class="badge badge-promo">kit 4 = R$15</span>` : ""}
+              ${isUvaProd ? `<span class="badge badge-promo">kit 4 = R$18</span>` : ""}
               <span class="badge ${avail ? (p.qty <= 2 ? 'badge-low' : 'badge-in') : 'badge-out'}">
                 ${avail ? (p.qty <= 2 ? `⚠️ Últimas ${p.qty}!` : `${p.qty} disp.`) : 'Esgotado'}
               </span>
@@ -1187,17 +1215,31 @@ function renderCartModal() {
   // Kit summary
   const kitSumEl   = document.getElementById("cart-kit-summary");
   const kitTextEl  = document.getElementById("cart-kit-text");
-  if (totalBrig > 0) {
+  const { uvaTotal, totalUva, uvaKits, uvaResto } = calcCartTotal();
+  const hasBrig = totalBrig > 0;
+  const hasUva  = totalUva  > 0;
+
+  if (hasBrig || hasUva) {
     kitSumEl.classList.remove("hidden");
     let kitMsg = "";
-    if (kits > 0) {
-      kitMsg += `🎉 ${kits} kit${kits>1?'s':''} de 4 = R$ ${(kits*PROMO_KIT).toFixed(2).replace(".",",")}`;
-      if (resto > 0) kitMsg += `  +  ${resto} avulso${resto>1?'s':''} = R$ ${(resto*PRICE_UNIT).toFixed(2).replace(".",",")}`;
-      const semDesc = totalBrig * PRICE_UNIT;
-      kitMsg += `  ·  Economia: R$ ${(semDesc - brigTotal).toFixed(2).replace(".",",")}`;
-    } else {
-      const faltam = PROMO_QTY - resto;
-      kitMsg = `💡 Adicione mais ${faltam} brigadeiro${faltam>1?'s':''} para ganhar o desconto de kit!`;
+    if (hasBrig) {
+      if (kits > 0) {
+        kitMsg += `🎉 ${kits} kit${kits>1?'s':''} brigadeiro = R$ ${(kits*PROMO_KIT).toFixed(2).replace(".",",")}`;
+        if (resto > 0) kitMsg += ` + ${resto} avulso${resto>1?'s':''}`;
+        kitMsg += `  ·  Ec. R$ ${(totalBrig*PRICE_UNIT - brigTotal).toFixed(2).replace(".",",")}`;
+      } else {
+        kitMsg += `💡 Faltam ${PROMO_QTY - resto} brigadeiro${PROMO_QTY-resto>1?'s':''} para o kit`;
+      }
+    }
+    if (hasUva) {
+      if (kitMsg) kitMsg += "  |  ";
+      if (uvaKits > 0) {
+        kitMsg += `🍇 ${uvaKits} kit${uvaKits>1?'s':''} Uva = R$ ${(uvaKits*UVA_KIT_PRICE).toFixed(2).replace(".",",")}`;
+        if (uvaResto > 0) kitMsg += ` + ${uvaResto} avulso${uvaResto>1?'s':''}`;
+        kitMsg += `  ·  Ec. R$ ${(totalUva*UVA_PRICE_UNIT - uvaTotal).toFixed(2).replace(".",",")}`;
+      } else {
+        kitMsg += `💡 Faltam ${UVA_KIT_QTY - uvaResto} Surpresa de Uva para o kit`;
+      }
     }
     kitTextEl.textContent = kitMsg;
   } else {
@@ -1311,6 +1353,7 @@ async function _doConfirmReserve(paymentStatus) {
 
   // Salvar pedido
   // Determine status: conta if payment method is conta
+  const _uvaCalc     = calcCartTotal();
   const _orderStatus = selectedPayment === "conta" ? "conta" : "pending";
 
   // Request push permission so client can receive paid confirmation
@@ -1324,6 +1367,10 @@ async function _doConfirmReserve(paymentStatus) {
     brigKits:      kits,
     brigResto:     resto,
     brigDiscount,
+    totalUva:      cartTotals.totalUva  || 0,
+    uvaKits:       _uvaCalc.uvaKits   || 0,
+    uvaResto:      _uvaCalc.uvaResto  || 0,
+    uvaDiscount:   (_uvaCalc.totalUva||0)*UVA_PRICE_UNIT - (_uvaCalc.uvaTotal||0),
     total,
     paymentMethod: selectedPayment === "conta" ? "pix" : selectedPayment,
     paymentStatus: _orderStatus,
