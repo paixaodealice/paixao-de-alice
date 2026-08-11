@@ -258,7 +258,7 @@
     @keyframes pop { 0%{transform:scale(1)} 50%{transform:scale(1.35)} 100%{transform:scale(1)} }
     .pop { animation:pop .25s ease; }
     /* Toast */
-    #toast { position:fixed; bottom:5.5rem; left:50%; transform:translateX(-50%) translateY(20px); z-index:200; background:var(--gold); color:#1A0F00; font-family:'Cinzel',serif; font-size:.8rem; font-weight:700; padding:.6rem 1.3rem; border-radius:999px; transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .3s; opacity:0; pointer-events:none; white-space:nowrap; max-width:90vw; text-align:center; }
+    #toast { position:fixed; bottom:5.5rem; left:50%; transform:translateX(-50%) translateY(20px); z-index:200; background:var(--gold); color:#1A0F00; font-family:'Cinzel',serif; font-size:.8rem; font-weight:700; line-height:1.4; padding:.7rem 1.1rem; border-radius:14px; transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .3s; opacity:0; pointer-events:none; white-space:pre-line; width:calc(100% - 2rem); max-width:380px; text-align:center; }
     #toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
   </style>
 </head>
@@ -1100,9 +1100,9 @@ function cartInc(id) {
   animateFab();
 
   if (isBrigadeiro(p) && after.kits > before.kits) {
-    showToast("🎉 Você economizou R$ 3,00 levando o Kit de Brigadeiros!");
+    showToast("🎉 Kit de Brigadeiros completo!\nVocê economizou R$ 3,00.");
   } else if (isUva(p) && after.uvaKits > before.uvaKits) {
-    showToast("🎉 Você economizou R$ 2,00 levando o Kit de Surpresa de Uva!");
+    showToast("🎉 Kit de Surpresa de Uva completo!\nVocê economizou R$ 2,00.");
   }
 }
 
