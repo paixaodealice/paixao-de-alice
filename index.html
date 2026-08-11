@@ -202,6 +202,14 @@
     .period-btn { background:transparent; border:1px solid var(--border); color:rgba(253,246,227,.55); font-family:'Lato',sans-serif; font-size:.72rem; font-weight:700; border-radius:6px; padding:.3rem .7rem; cursor:pointer; transition:background .15s,color .15s,border-color .15s; white-space:nowrap; }
     .period-btn.active { background:rgba(201,146,42,.18); border-color:var(--gold); color:var(--gold-lt); }
     .period-btn:hover   { background:rgba(201,146,42,.1); }
+    /* Client menu search + category filters */
+    .menu-filter-row { display:flex; gap:.45rem; flex-wrap:wrap; align-items:center; }
+    .menu-filter-btn { background:transparent; border:1px solid var(--border); color:rgba(253,246,227,.6); font-size:.72rem; font-weight:700; border-radius:999px; padding:.38rem .75rem; cursor:pointer; transition:background .15s,color .15s,border-color .15s; }
+    .menu-filter-btn:hover { background:rgba(201,146,42,.1); }
+    .menu-filter-btn.active { background:rgba(201,146,42,.18); border-color:var(--gold); color:var(--gold-lt); }
+    .menu-filter-check { display:flex; align-items:center; gap:.4rem; color:rgba(253,246,227,.55); font-size:.72rem; cursor:pointer; margin-left:auto; }
+    .menu-filter-check input { accent-color:var(--gold); width:15px; height:15px; }
+    @media (max-width:420px) { .menu-filter-btn { flex:1 1 calc(50% - .45rem); text-align:center; } .menu-filter-check { width:100%; margin-left:0; padding-top:.15rem; } }
     /* Day accordion */
     .day-row { cursor:pointer; }
     .day-row:hover { background:rgba(201,146,42,.05); }
@@ -380,6 +388,17 @@
           <p class="text-xs mt-0.5" style="color:rgba(253,246,227,.4);" id="clube-member-detail"></p>
         </div>
       </div>
+    </div>
+
+    <!-- Busca e filtros do cardápio -->
+    <div id="menu-filter-wrap" class="hidden mb-3">
+      <div class="autocomplete-wrap mb-2">
+        <input id="menu-search" type="search" class="input-dark" placeholder="🔍 Buscar produto…"
+          autocomplete="off" style="font-size:.85rem;"
+          oninput="onMenuSearch(this.value)" />
+      </div>
+      <div class="menu-filter-row" id="menu-category-filters"></div>
+      <p id="menu-filter-results-count" class="text-xs mt-2" style="color:rgba(253,246,227,.35);"></p>
     </div>
 
     <div id="product-list">
@@ -925,6 +944,9 @@ let isAdmin       = false;
 let cartSessionId = null;
 let _confirmLocked = false;
 const _submittedSessionIds = new Set();
+let clientMenuSearch = "";
+let clientMenuCategory = "Todos";
+let clientOnlyAvailable = false;
 const CART_STORAGE_KEY = "paixaoAliceCartV1";
 let _cartRestoreAttempted = false;
 
@@ -1117,17 +1139,81 @@ function cartItemCount() {
 }
 
 // ── Render cardápio ───────────────────────────────────────────────────
+function normalizeMenuText(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function onMenuSearch(value) {
+  clientMenuSearch = value || "";
+  renderProducts();
+}
+
+function selectMenuCategory(category) {
+  clientMenuCategory = category || "Todos";
+  renderProducts();
+}
+
+function toggleMenuAvailable(checked) {
+  clientOnlyAvailable = !!checked;
+  renderProducts();
+}
+
+function renderMenuFilters(allKeys, filteredCount) {
+  const wrap = document.getElementById("menu-filter-wrap");
+  const row  = document.getElementById("menu-category-filters");
+  const countEl = document.getElementById("menu-filter-results-count");
+  if (!wrap || !row || !countEl) return;
+  wrap.classList.remove("hidden");
+
+  const categories = [...new Set(allKeys.map(id => products[id]?.category || "Outros"))];
+  if (clientMenuCategory !== "Todos" && !categories.includes(clientMenuCategory)) {
+    clientMenuCategory = "Todos";
+  }
+
+  const buttons = ["Todos", ...categories].map(cat => `
+    <button type="button" class="menu-filter-btn ${clientMenuCategory===cat?'active':''}"
+      data-category="${encodeURIComponent(cat)}"
+      onclick="selectMenuCategory(decodeURIComponent(this.dataset.category))">${esc(cat)}</button>
+  `).join("");
+
+  row.innerHTML = buttons + `
+    <label class="menu-filter-check">
+      <input type="checkbox" ${clientOnlyAvailable?'checked':''} onchange="toggleMenuAvailable(this.checked)" />
+      <span>Somente disponíveis</span>
+    </label>`;
+  countEl.textContent = `${filteredCount} produto${filteredCount!==1?'s':''} encontrado${filteredCount!==1?'s':''}`;
+}
+
 function renderProducts() {
   const el   = document.getElementById("product-list");
   const keys = Object.keys(products);
   if (!keys.length) {
+    document.getElementById("menu-filter-wrap")?.classList.add("hidden");
     el.innerHTML = `<div class="text-center py-12 text-sm" style="color:rgba(253,246,227,.3);">Nenhum produto disponível hoje 🍫</div>`;
+    return;
+  }
+
+  const query = normalizeMenuText(clientMenuSearch.trim());
+  const filteredKeys = keys.filter(id => {
+    const p = products[id];
+    if (!p) return false;
+    const category = p.category || "Outros";
+    const matchesCategory = clientMenuCategory === "Todos" || category === clientMenuCategory;
+    const matchesSearch   = !query || normalizeMenuText(p.name).includes(query);
+    const matchesStock    = !clientOnlyAvailable || (p.qty || 0) > 0;
+    return matchesCategory && matchesSearch && matchesStock;
+  });
+  renderMenuFilters(keys, filteredKeys.length);
+
+  if (!filteredKeys.length) {
+    el.innerHTML = `<div class="text-center py-10 text-sm" style="color:rgba(253,246,227,.4);">Nenhum produto encontrado.<br><span style="font-size:.75rem;color:rgba(253,246,227,.3);">Tente outra busca ou categoria.</span></div>`;
+    updateCartUI();
     return;
   }
 
   // Group by category
   const groups = {};
-  keys.forEach(id => {
+  filteredKeys.forEach(id => {
     const p = products[id];
     const cat = p.category || "Outros";
     if (!groups[cat]) groups[cat] = [];
