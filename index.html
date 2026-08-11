@@ -119,6 +119,42 @@
     .gold-line { height:1px; background:linear-gradient(90deg,transparent,var(--gold),transparent); }
     .card { background:linear-gradient(145deg,#1e1608,#120e04); border:1px solid var(--border); border-radius:12px; transition:transform .2s,box-shadow .2s; }
     .card:hover { transform:translateY(-2px); box-shadow:0 8px 32px rgba(201,146,42,.12); }
+    /* Client product cards — clearer visual hierarchy without changing behavior */
+    .product-card-client { padding:.85rem; }
+    .product-card-client.product-card-promo {
+      border-color:rgba(232,184,75,.52);
+      box-shadow:0 6px 22px rgba(201,146,42,.09);
+    }
+    .product-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:.65rem; }
+    .product-card-copy { flex:1; min-width:0; }
+    .product-card-name {
+      color:var(--cream); font-size:.88rem; line-height:1.3;
+      font-family:'Cinzel',serif; font-weight:700;
+    }
+    .product-card-category { color:rgba(253,246,227,.38); font-size:.68rem; margin-top:.15rem; }
+    .product-card-promo-label {
+      background:rgba(251,191,36,.12); color:#fbbf24;
+      border:1px solid rgba(251,191,36,.38); border-radius:999px;
+      padding:.2rem .5rem; font-size:.56rem; line-height:1.2; font-weight:700;
+      letter-spacing:.055em; white-space:nowrap; flex-shrink:0;
+    }
+    .product-card-price {
+      color:var(--gold-lt); font-family:'Cinzel',serif; font-size:1rem;
+      font-weight:700; margin-top:.75rem; line-height:1.2;
+    }
+    .product-card-kit { color:rgba(253,246,227,.65); font-size:.7rem; margin-top:.28rem; line-height:1.4; }
+    .product-card-kit strong { color:var(--cream); }
+    .product-card-economy { color:#4ade80; white-space:nowrap; }
+    .product-card-bottom { display:flex; align-items:center; justify-content:space-between; gap:.65rem; margin-top:.8rem; }
+    .product-card-stock { font-size:.68rem; color:rgba(253,246,227,.42); }
+    .product-card-stock.low { color:#fb923c; }
+    .product-card-stock.out { color:#f87171; }
+    .product-card-client:not(.product-card-promo) .product-card-bottom { margin-top:.75rem; }
+    @media (max-width:360px) {
+      .product-card-promo-label { white-space:normal; text-align:center; max-width:7.4rem; }
+      .product-card-kit { padding-right:.1rem; }
+      .product-card-economy { white-space:normal; }
+    }
     .badge { font-size:.65rem; font-weight:700; letter-spacing:.05em; padding:2px 8px; border-radius:999px; display:inline-block; }
     .badge-in    { background:rgba(74,222,128,.12);  color:#4ade80; border:1px solid rgba(74,222,128,.3); }
     .badge-out   { background:rgba(239,68,68,.12);   color:#f87171; border:1px solid rgba(239,68,68,.3); }
@@ -1235,25 +1271,29 @@ function renderProducts() {
       const isUvaProd = isUva(p);
       const price     = isBrig ? PRICE_UNIT : isUvaProd ? UVA_PRICE_UNIT : parseFloat(p.price);
       return `
-      <div class="card p-3 mb-2 fade-up" style="animation-delay:${i*0.04}s">
-        <div class="flex items-center gap-3">
-          <div class="flex-1 min-w-0">
-            <p class="cinzel font-bold text-sm gold-text">${esc(p.name)}</p>
-            <div class="flex items-center gap-2 mt-0.5 flex-wrap">
-              <span style="color:var(--gold);font-size:.82rem;">R$ ${price.toFixed(2).replace(".",",")}</span>
-              ${isBrig    ? `<span class="badge badge-promo">kit 4 = R$15</span>` : ""}
-              ${isUvaProd ? `<span class="badge badge-promo">kit 4 = R$18</span>` : ""}
-              <span class="badge ${avail ? (p.qty <= 2 ? 'badge-low' : 'badge-in') : 'badge-out'}">
-                ${avail ? (p.qty <= 2 ? `⚠️ Últimas ${p.qty}!` : `${p.qty} disp.`) : 'Esgotado'}
-              </span>
-            </div>
+      <div class="card product-card-client ${isBrig || isUvaProd ? 'product-card-promo' : ''} mb-2 fade-up" style="animation-delay:${i*0.04}s">
+        <div class="product-card-head">
+          <div class="product-card-copy">
+            <p class="product-card-name">${esc(p.name)}</p>
+            <p class="product-card-category">${esc(cat)}</p>
           </div>
+          ${isBrig || isUvaProd ? `<span class="product-card-promo-label">KIT COM DESCONTO</span>` : ""}
+        </div>
+
+        <p class="product-card-price">R$ ${price.toFixed(2).replace(".",",")}</p>
+        ${isBrig ? `<p class="product-card-kit">Leve 4 por <strong>R$ 15,00</strong> <span class="product-card-economy">· Economize R$ 3,00</span></p>` : ""}
+        ${isUvaProd ? `<p class="product-card-kit">Leve 4 por <strong>R$ 18,00</strong> <span class="product-card-economy">· Economize R$ 2,00</span></p>` : ""}
+
+        <div class="product-card-bottom">
+          <span class="product-card-stock ${avail ? (p.qty <= 2 ? 'low' : '') : 'out'}">
+            ${avail ? (p.qty <= 2 ? `⚠️ Últimas ${p.qty} unidade${p.qty!==1?'s':''}` : `${p.qty} disponíveis`) : 'Esgotado'}
+          </span>
           ${avail ? `
-          <div class="qty-stepper flex-shrink-0" style="height:34px;">
-            <button class="qty-btn" style="width:30px;height:34px;" onclick="cartDec('${p.id}')" ${inCart===0?'disabled':''}>−</button>
-            <span class="qty-input" style="font-size:.85rem;width:30px;height:34px;display:flex;align-items:center;justify-content:center;">${inCart}</span>
-            <button class="qty-btn" style="width:30px;height:34px;" onclick="cartInc('${p.id}')">+</button>
-          </div>` : `<button class="add-btn" disabled style="opacity:.25;">+</button>`}
+            <div class="qty-stepper flex-shrink-0" style="height:36px;">
+              <button class="qty-btn" style="width:34px;height:36px;" onclick="cartDec('${p.id}')" ${inCart===0?'disabled':''}>−</button>
+              <span class="qty-input" style="font-size:.85rem;width:34px;height:36px;display:flex;align-items:center;justify-content:center;">${inCart}</span>
+              <button class="qty-btn" style="width:34px;height:36px;" onclick="cartInc('${p.id}')">+</button>
+            </div>` : `<button class="add-btn" disabled style="opacity:.25;">+</button>`}
         </div>
       </div>`;
     }).join("")}
