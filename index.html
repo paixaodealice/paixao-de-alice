@@ -993,30 +993,27 @@ function isUva(p)        { return p && p.type === "brigadeiro_uva"; }
 
 // Calcula o total do carrinho aplicando promo cross-sabor
 function calcCartTotal() {
-  let totalBrig = 0;
+  let totalBrig  = 0;
+  let totalUva   = 0;
   let totalOther = 0;
+
   Object.entries(cart).forEach(([id, qty]) => {
     const p = products[id];
     if (!p) return;
-    if (isBrigadeiro(p)) totalBrig += qty;
-    else totalOther += parseFloat(p.price) * qty;
+    if (isBrigadeiro(p))   totalBrig  += qty;                        // contado por unidade
+    else if (isUva(p))     totalUva   += qty;                        // contado por unidade, NÃO entra em totalOther
+    else                   totalOther += parseFloat(p.price) * qty;  // preço normal
   });
-  // Brigadeiros com promo cross-sabor
-  const kits  = Math.floor(totalBrig / PROMO_QTY);
-  const resto = totalBrig % PROMO_QTY;
+
+  // Brigadeiros — kit cross-sabor R$15
+  const kits      = Math.floor(totalBrig / PROMO_QTY);
+  const resto     = totalBrig % PROMO_QTY;
   const brigTotal = (kits * PROMO_KIT) + (resto * PRICE_UNIT);
 
-  // Surpresa de Uva — kit próprio separado
-  let totalUva = 0;
-  let uvaTotal = 0;
-  Object.entries(cart).forEach(([id, qty]) => {
-    const p = products[id];
-    if (!p || !isUva(p)) return;
-    totalUva += qty;
-  });
-  const uvaKits  = Math.floor(totalUva / UVA_KIT_QTY);
-  const uvaResto = totalUva % UVA_KIT_QTY;
-  uvaTotal = (uvaKits * UVA_KIT_PRICE) + (uvaResto * UVA_PRICE_UNIT);
+  // Surpresa de Uva — kit separado R$18
+  const uvaKits   = Math.floor(totalUva / UVA_KIT_QTY);
+  const uvaResto  = totalUva % UVA_KIT_QTY;
+  const uvaTotal  = (uvaKits * UVA_KIT_PRICE) + (uvaResto * UVA_PRICE_UNIT);
 
   return { total: brigTotal + uvaTotal + totalOther, brigTotal, totalBrig, kits, resto, totalOther, uvaTotal, totalUva, uvaKits, uvaResto };
 }
@@ -1170,8 +1167,9 @@ function renderCartModal() {
   // Items list
   let itemsHtml = "";
   // Brigadeiros group
-  const brigItems = keys.filter(id => products[id] && isBrigadeiro(products[id]));
-  const otherItems = keys.filter(id => products[id] && !isBrigadeiro(products[id]));
+  const brigItems  = keys.filter(id => products[id] && isBrigadeiro(products[id]));
+  const uvaItems   = keys.filter(id => products[id] && isUva(products[id]));
+  const otherItems = keys.filter(id => products[id] && !isBrigadeiro(products[id]) && !isUva(products[id]));
 
   if (brigItems.length) {
     brigItems.forEach(id => {
@@ -1191,6 +1189,24 @@ function renderCartModal() {
       </div>`;
     });
   }
+
+  // Surpresa de Uva items
+  uvaItems.forEach(id => {
+    const p = products[id]; const qty = cart[id];
+    itemsHtml += `
+    <div class="cart-item">
+      <span style="font-size:1.1rem;">🍇</span>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm cinzel font-bold" style="color:var(--cream);">${esc(p.name)}</p>
+        <p class="text-xs" style="color:rgba(253,246,227,.4);">R$ ${UVA_PRICE_UNIT.toFixed(2).replace(".",",")} × ${qty}</p>
+      </div>
+      <div class="qty-stepper flex-shrink-0" style="height:30px;">
+        <button class="qty-btn" style="width:28px;height:30px;font-size:1rem;" onclick="cartDec('${id}');renderCartModal()">−</button>
+        <span class="qty-input" style="width:26px;height:30px;font-size:.8rem;display:flex;align-items:center;justify-content:center;">${qty}</span>
+        <button class="qty-btn" style="width:28px;height:30px;font-size:1rem;" onclick="cartInc('${id}');renderCartModal()">+</button>
+      </div>
+    </div>`;
+  });
 
   otherItems.forEach(id => {
     const p = products[id]; const qty = cart[id];
@@ -1247,11 +1263,16 @@ function renderCartModal() {
   }
 
   // Totals
-  let totalsHtml = `<div class="summary-row"><span style="color:rgba(253,246,227,.55);">Subtotal</span><span class="cinzel font-bold gold-text">R$ ${total.toFixed(2).replace(".",",")}</span></div>`;
-  if (totalBrig > 0 && kits > 0) {
-    const semDesc = totalBrig * PRICE_UNIT;
-    const eco = semDesc - brigTotal;
-    totalsHtml += `<div class="summary-row"><span style="color:#4ade80;font-size:.78rem;">Desconto kit brigadeiro</span><span style="color:#4ade80;font-size:.78rem;font-weight:700;">− R$ ${eco.toFixed(2).replace(".",",")}</span></div>`;
+  // Recalculate fresh from cart to ensure accuracy
+  const freshCalc = calcCartTotal();
+  let totalsHtml = `<div class="summary-row"><span style="color:rgba(253,246,227,.55);">Subtotal</span><span class="cinzel font-bold gold-text">R$ ${freshCalc.total.toFixed(2).replace(".",",")}</span></div>`;
+  if (freshCalc.totalBrig > 0 && freshCalc.kits > 0) {
+    const ecoB = (freshCalc.totalBrig * PRICE_UNIT) - freshCalc.brigTotal;
+    totalsHtml += `<div class="summary-row"><span style="color:#4ade80;font-size:.78rem;">Desconto kit brigadeiro</span><span style="color:#4ade80;font-size:.78rem;font-weight:700;">− R$ ${ecoB.toFixed(2).replace(".",",")}</span></div>`;
+  }
+  if (freshCalc.totalUva > 0 && freshCalc.uvaKits > 0) {
+    const ecoU = (freshCalc.totalUva * UVA_PRICE_UNIT) - freshCalc.uvaTotal;
+    totalsHtml += `<div class="summary-row"><span style="color:#4ade80;font-size:.78rem;">Desconto kit Surpresa de Uva</span><span style="color:#4ade80;font-size:.78rem;font-weight:700;">− R$ ${ecoU.toFixed(2).replace(".",",")}</span></div>`;
   }
   document.getElementById("cart-totals").innerHTML = totalsHtml;
 
@@ -1267,7 +1288,11 @@ function goToCheckout() {
   let html = `<div class="card p-3 mb-3" style="font-size:.82rem;">`;
   keys.forEach(id => {
     const p = products[id]; const qty = cart[id]; if (!p) return;
-    const price = isBrigadeiro(p) ? PRICE_UNIT : parseFloat(p.price);
+    const price = isBrigadeiro(p)
+      ? PRICE_UNIT
+      : isUva(p)
+        ? UVA_PRICE_UNIT
+        : parseFloat(p.price);
     html += `<div class="summary-row"><span style="color:rgba(253,246,227,.7);">${esc(p.name)} ×${qty}</span><span>R$ ${(price*qty).toFixed(2).replace(".",",")}</span></div>`;
   });
   html += `<div class="summary-divider"></div>`;
@@ -1344,7 +1369,11 @@ async function _doConfirmReserve(paymentStatus) {
     productId:   id,
     productName: products[id].name,
     qty:         cart[id],
-    unitPrice:   isBrigadeiro(products[id]) ? PRICE_UNIT : parseFloat(products[id].price),
+    unitPrice:   isBrigadeiro(products[id])
+      ? PRICE_UNIT
+      : isUva(products[id])
+        ? UVA_PRICE_UNIT
+        : parseFloat(products[id].price),
     type:        products[id].type || "normal"
   }));
 
@@ -1367,7 +1396,7 @@ async function _doConfirmReserve(paymentStatus) {
     brigKits:      kits,
     brigResto:     resto,
     brigDiscount,
-    totalUva:      cartTotals.totalUva  || 0,
+    totalUva:      _uvaCalc.totalUva || 0,
     uvaKits:       _uvaCalc.uvaKits   || 0,
     uvaResto:      _uvaCalc.uvaResto  || 0,
     uvaDiscount:   (_uvaCalc.totalUva||0)*UVA_PRICE_UNIT - (_uvaCalc.uvaTotal||0),
@@ -3851,7 +3880,11 @@ document.addEventListener("input", function(e) {
   // Check active products
   const prodMatch = Object.values(products).find(p => p.name.toLowerCase() === val);
   if (prodMatch) {
-    const price = prodMatch.type === "brigadeiro" ? 4.50 : parseFloat(prodMatch.price);
+    const price = prodMatch.type === "brigadeiro"
+      ? PRICE_UNIT
+      : prodMatch.type === "brigadeiro_uva"
+        ? UVA_PRICE_UNIT
+        : parseFloat(prodMatch.price);
     priceEl.value = price.toFixed(2);
   }
 });
