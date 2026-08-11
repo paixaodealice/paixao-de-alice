@@ -1088,10 +1088,22 @@ function cartInc(id) {
   if (!p || p.qty <= 0) return;
   const current = cart[id] || 0;
   if (current >= p.qty) { showToast("Quantidade máxima disponível!"); return; }
+
+  // Guarda a quantidade de kits antes de adicionar a nova unidade.
+  // Assim, a notificação aparece somente quando um novo kit é completado.
+  const before = calcCartTotal();
   cart[id] = current + 1;
+  const after = calcCartTotal();
+
   updateCartUI();
   renderProducts();
   animateFab();
+
+  if (isBrigadeiro(p) && after.kits > before.kits) {
+    showToast("🎉 Você economizou R$ 3,00 levando o Kit de Brigadeiros!");
+  } else if (isUva(p) && after.uvaKits > before.uvaKits) {
+    showToast("🎉 Você economizou R$ 2,00 levando o Kit de Surpresa de Uva!");
+  }
 }
 
 function cartDec(id) {
@@ -1240,9 +1252,14 @@ function renderCartModal() {
     let kitMsg = "";
     if (hasBrig) {
       if (kits > 0) {
-        kitMsg += `🎉 ${kits} kit${kits>1?'s':''} brigadeiro = R$ ${(kits*PROMO_KIT).toFixed(2).replace(".",",")}`;
-        if (resto > 0) kitMsg += ` + ${resto} avulso${resto>1?'s':''}`;
-        kitMsg += `  ·  Ec. R$ ${(totalBrig*PRICE_UNIT - brigTotal).toFixed(2).replace(".",",")}`;
+        const kitQtyBrig = kits * PROMO_QTY;
+        const ecoBrig = totalBrig * PRICE_UNIT - brigTotal;
+        kitMsg += `🎉 ${kits} Kit${kits>1?'s':''} de Brigadeiros completo${kits>1?'s':''}! `;
+        kitMsg += `${kitQtyBrig} unidades por R$ ${(kits*PROMO_KIT).toFixed(2).replace(".",",")}`;
+        if (resto > 0) {
+          kitMsg += ` + ${resto} unidade${resto>1?'s':''} avulsa${resto>1?'s':''} por R$ ${(resto*PRICE_UNIT).toFixed(2).replace(".",",")}`;
+        }
+        kitMsg += `. Você economizou R$ ${ecoBrig.toFixed(2).replace(".",",")}.`;
       } else {
         kitMsg += `💡 Faltam ${PROMO_QTY - resto} brigadeiro${PROMO_QTY-resto>1?'s':''} para o kit`;
       }
@@ -1250,9 +1267,14 @@ function renderCartModal() {
     if (hasUva) {
       if (kitMsg) kitMsg += "  |  ";
       if (uvaKits > 0) {
-        kitMsg += `🍇 ${uvaKits} kit${uvaKits>1?'s':''} Uva = R$ ${(uvaKits*UVA_KIT_PRICE).toFixed(2).replace(".",",")}`;
-        if (uvaResto > 0) kitMsg += ` + ${uvaResto} avulso${uvaResto>1?'s':''}`;
-        kitMsg += `  ·  Ec. R$ ${(totalUva*UVA_PRICE_UNIT - uvaTotal).toFixed(2).replace(".",",")}`;
+        const kitQtyUva = uvaKits * UVA_KIT_QTY;
+        const ecoUva = totalUva * UVA_PRICE_UNIT - uvaTotal;
+        kitMsg += `🎉 ${uvaKits} Kit${uvaKits>1?'s':''} de Surpresa de Uva completo${uvaKits>1?'s':''}! `;
+        kitMsg += `${kitQtyUva} unidades por R$ ${(uvaKits*UVA_KIT_PRICE).toFixed(2).replace(".",",")}`;
+        if (uvaResto > 0) {
+          kitMsg += ` + ${uvaResto} unidade${uvaResto>1?'s':''} avulsa${uvaResto>1?'s':''} por R$ ${(uvaResto*UVA_PRICE_UNIT).toFixed(2).replace(".",",")}`;
+        }
+        kitMsg += `. Você economizou R$ ${ecoUva.toFixed(2).replace(".",",")}.`;
       } else {
         kitMsg += `💡 Faltam ${UVA_KIT_QTY - uvaResto} Surpresa de Uva para o kit`;
       }
