@@ -199,6 +199,44 @@
     .cart-badge { background:#1A0F00; color:var(--gold-lt); border-radius:999px; width:22px; height:22px; display:flex; align-items:center; justify-content:center; font-size:.75rem; font-weight:900; }
     /* Promo banner */
     .promo-banner { background:linear-gradient(135deg,rgba(251,191,36,.1),rgba(201,146,42,.07)); border:1px solid rgba(251,191,36,.3); border-radius:10px; padding:.65rem 1rem; }
+    .promo-menu-card {
+      background:linear-gradient(135deg,rgba(251,191,36,.1),rgba(201,146,42,.07));
+      border:1px solid rgba(251,191,36,.3); border-radius:10px; overflow:hidden;
+    }
+    .promo-menu-toggle {
+      width:100%; display:flex; align-items:center; gap:.7rem; padding:.72rem .85rem;
+      border:none; background:transparent; color:var(--cream); text-align:left; cursor:pointer;
+    }
+    .promo-menu-icon { font-size:1.25rem; flex-shrink:0; }
+    .promo-menu-copy { flex:1; min-width:0; }
+    .promo-menu-title {
+      color:#fbbf24; font-family:'Cinzel',serif; font-size:.74rem; font-weight:700;
+      letter-spacing:.065em; line-height:1.25;
+    }
+    .promo-menu-subtitle { color:rgba(253,246,227,.48); font-size:.68rem; margin-top:.12rem; }
+    .promo-menu-action {
+      display:flex; align-items:center; gap:.25rem; color:var(--gold-lt);
+      font-size:.66rem; font-weight:700; white-space:nowrap; flex-shrink:0;
+    }
+    .promo-menu-chevron { display:inline-block; font-size:.65rem; transition:transform .2s; }
+    .promo-menu-card.open .promo-menu-chevron { transform:rotate(180deg); }
+    .promo-menu-details { display:none; padding:0 .85rem .8rem 3.05rem; }
+    .promo-menu-card.open .promo-menu-details { display:block; animation:fade-up .2s ease both; }
+    .promo-menu-offer {
+      display:flex; justify-content:space-between; align-items:flex-start; gap:.65rem;
+      padding:.58rem 0; border-top:1px solid rgba(251,191,36,.17); font-size:.7rem;
+    }
+    .promo-menu-offer-name { color:var(--cream); font-weight:700; }
+    .promo-menu-offer-save { color:#4ade80; font-size:.65rem; margin-top:.12rem; }
+    .promo-menu-offer-price { color:var(--gold-lt); font-weight:700; white-space:nowrap; text-align:right; }
+    .promo-menu-note {
+      display:flex; align-items:center; gap:.35rem; padding-top:.58rem;
+      border-top:1px solid rgba(251,191,36,.17); color:rgba(253,246,227,.45); font-size:.65rem;
+    }
+    @media (max-width:360px) {
+      .promo-menu-action-text { display:none; }
+      .promo-menu-details { padding-left:.85rem; }
+    }
     /* Kit progress bar */
     .kit-progress-wrap { background:rgba(255,255,255,.06); border-radius:999px; height:6px; overflow:hidden; }
     .kit-progress-bar  { height:100%; border-radius:999px; background:linear-gradient(90deg,#fbbf24,#f59e0b); transition:width .3s; }
@@ -344,22 +382,36 @@
       <button onclick="shareMenu()" class="btn-outline btn-sm flex-shrink-0" style="font-size:.7rem;">📤 Compartilhar</button>
     </div>
 
-    <!-- Promo banner -->
-    <div class="promo-banner mb-5 flex items-start gap-3">
-      <span style="font-size:1.4rem;margin-top:1px;">🎉</span>
-      <div class="flex-1">
-        <p class="cinzel font-bold text-sm" style="color:#fbbf24;">PROMOÇÃO BRIGADEIROS</p>
-        <p class="text-xs mt-0.5" style="color:rgba(253,246,227,.65);">
-          🍬 Brigadeiro: <strong style="color:var(--cream);">R$ 4,50 un.</strong>
-          &nbsp;·&nbsp; Kit 4 = <strong style="color:#4ade80;">R$ 15,00</strong>
-          <span style="color:rgba(253,246,227,.35);"> (ec. R$ 3,00)</span>
-        </p>
-        <p class="text-xs mt-0.5" style="color:rgba(253,246,227,.65);">
-          🍇 Surpresa de Uva: <strong style="color:var(--cream);">R$ 5,00 un.</strong>
-          &nbsp;·&nbsp; Kit 4 = <strong style="color:#4ade80;">R$ 18,00</strong>
-          <span style="color:rgba(253,246,227,.35);"> (ec. R$ 2,00)</span>
-        </p>
-        <p class="text-xs mt-1" style="color:rgba(253,246,227,.4);">Kits por tipo — desconto aplicado automaticamente no carrinho.</p>
+    <!-- Promo banner compacto e expansível -->
+    <div id="promo-menu-card" class="promo-menu-card mb-4">
+      <button type="button" class="promo-menu-toggle" onclick="togglePromoMenu()" aria-expanded="false" aria-controls="promo-menu-details">
+        <span class="promo-menu-icon">🎉</span>
+        <span class="promo-menu-copy">
+          <span class="promo-menu-title block">KITS COM DESCONTO</span>
+          <span class="promo-menu-subtitle block">Brigadeiros e Surpresa de Uva</span>
+        </span>
+        <span class="promo-menu-action">
+          <span id="promo-menu-action-text" class="promo-menu-action-text">Ver ofertas</span>
+          <span class="promo-menu-chevron">▼</span>
+        </span>
+      </button>
+
+      <div id="promo-menu-details" class="promo-menu-details">
+        <div class="promo-menu-offer">
+          <div>
+            <p class="promo-menu-offer-name">🍬 Brigadeiros</p>
+            <p class="promo-menu-offer-save">Economize R$ 3,00</p>
+          </div>
+          <p class="promo-menu-offer-price">4 por R$ 15,00</p>
+        </div>
+        <div class="promo-menu-offer">
+          <div>
+            <p class="promo-menu-offer-name">🍇 Surpresa de Uva</p>
+            <p class="promo-menu-offer-save">Economize R$ 2,00</p>
+          </div>
+          <p class="promo-menu-offer-price">4 por R$ 18,00</p>
+        </div>
+        <p class="promo-menu-note"><span style="color:#4ade80;">✓</span> Desconto aplicado automaticamente no carrinho</p>
 
         <!-- Kit progress (aparece quando há brigadeiros no carrinho) -->
         <div id="kit-progress-wrap" class="hidden mt-2">
@@ -1336,6 +1388,25 @@ function cartDec(id) {
   renderProducts();
 }
 
+// ── Banner compacto de promoções ──────────────────────────────────────
+let _promoMenuAutoOpened = false;
+
+function setPromoMenuOpen(open) {
+  const card = document.getElementById("promo-menu-card");
+  if (!card) return;
+  card.classList.toggle("open", open);
+  const btn = card.querySelector(".promo-menu-toggle");
+  if (btn) btn.setAttribute("aria-expanded", String(open));
+  const actionText = document.getElementById("promo-menu-action-text");
+  if (actionText) actionText.textContent = open ? "Fechar" : "Ver ofertas";
+}
+
+function togglePromoMenu() {
+  const card = document.getElementById("promo-menu-card");
+  if (!card) return;
+  setPromoMenuOpen(!card.classList.contains("open"));
+}
+
 function updateCartUI() {
   const count = cartItemCount();
   const fab     = document.getElementById("cart-fab");
@@ -1355,8 +1426,20 @@ function updateCartUI() {
   }
 
   // Kit progress bar
-  const { totalBrig, kits, resto } = calcCartTotal();
+  const { totalBrig, kits, resto, totalUva } = calcCartTotal();
   const progressWrap = document.getElementById("kit-progress-wrap");
+
+  // Na primeira adição de um produto promocional, abre o banner para
+  // apresentar as ofertas e o progresso. O cliente ainda pode fechá-lo.
+  const promoItemCount = totalBrig + totalUva;
+  if (promoItemCount > 0 && !_promoMenuAutoOpened) {
+    setPromoMenuOpen(true);
+    _promoMenuAutoOpened = true;
+  } else if (promoItemCount === 0 && _promoMenuAutoOpened) {
+    setPromoMenuOpen(false);
+    _promoMenuAutoOpened = false;
+  }
+
   if (totalBrig > 0) {
     progressWrap.classList.remove("hidden");
     const posInKit = resto; // 0..3
