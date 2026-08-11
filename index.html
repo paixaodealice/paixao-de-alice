@@ -1789,12 +1789,28 @@ async function changeQtyAdmin(id, delta) {
 function openEditTodayProduct(id) {
   const p = products[id];
   if (!p) { showToast("Produto não encontrado"); return; }
+  const priceEl = document.getElementById("edit-today-product-price");
+  const noteEl  = document.getElementById("edit-today-product-note");
+  const saveBtn = document.getElementById("btn-save-edit-today-product");
+  const priceLocked = isBrigadeiro(p) || isUva(p);
   document.getElementById("edit-today-product-id").value = id;
   document.getElementById("edit-today-product-name").textContent = p.name || "Produto";
-  document.getElementById("edit-today-product-price").value = parseFloat(p.price || 0).toFixed(2);
+  priceEl.value = (isBrigadeiro(p)
+    ? PRICE_UNIT
+    : isUva(p)
+      ? UVA_PRICE_UNIT
+      : parseFloat(p.price || 0)).toFixed(2);
+  priceEl.disabled = priceLocked;
+  priceEl.style.opacity = priceLocked ? ".5" : "";
   document.getElementById("edit-today-product-qty").value = Math.max(0, parseInt(p.qty || 0));
+  noteEl.textContent = isBrigadeiro(p)
+    ? "🔒 Preço controlado pela promoção: 1 por R$ 4,50 e kit com 4 por R$ 15,00. Você pode editar somente a quantidade."
+    : isUva(p)
+      ? "🔒 Preço controlado pela promoção: 1 por R$ 5,00 e kit com 4 por R$ 18,00. Você pode editar somente a quantidade."
+      : "Nome, categoria e tipo do produto permanecem inalterados. O Estoque Base também não será modificado.";
+  if (saveBtn) saveBtn.textContent = priceLocked ? "✓ Salvar quantidade" : "✓ Salvar alterações";
   document.getElementById("modal-edit-today-product").classList.remove("hidden");
-  setTimeout(() => document.getElementById("edit-today-product-price").focus(), 100);
+  setTimeout(() => document.getElementById(priceLocked ? "edit-today-product-qty" : "edit-today-product-price").focus(), 100);
 }
 
 function closeEditTodayProduct() {
@@ -1803,23 +1819,24 @@ function closeEditTodayProduct() {
 
 async function saveEditTodayProduct() {
   const id    = document.getElementById("edit-today-product-id").value;
-  const price = parseFloat(document.getElementById("edit-today-product-price").value);
   const qty   = parseInt(document.getElementById("edit-today-product-qty").value);
   if (!id || !products[id]) { showToast("Produto não encontrado"); return; }
-  if (isNaN(price) || price < 0 || isNaN(qty) || qty < 0) {
-    showToast("Informe preço e quantidade válidos ⚠️"); return;
-  }
+  const p = products[id];
+  const priceLocked = isBrigadeiro(p) || isUva(p);
+  const price = parseFloat(document.getElementById("edit-today-product-price").value);
+  if (isNaN(qty) || qty < 0) { showToast("Informe uma quantidade válida ⚠️"); return; }
+  if (!priceLocked && (isNaN(price) || price < 0)) { showToast("Informe um preço válido ⚠️"); return; }
 
   const btn = document.getElementById("btn-save-edit-today-product");
   if (btn) { btn.disabled = true; btn.textContent = "Salvando…"; }
   try {
-    await window._fb.updateProduct(id, { price, qty });
+    await window._fb.updateProduct(id, priceLocked ? { qty } : { price, qty });
     closeEditTodayProduct();
     showToast("✅ Cardápio de hoje atualizado!");
   } catch(e) {
     showToast("❌ Não foi possível salvar. Tente novamente.");
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "✓ Salvar alterações"; }
+    if (btn) { btn.disabled = false; btn.textContent = priceLocked ? "✓ Salvar quantidade" : "✓ Salvar alterações"; }
   }
 }
 
@@ -4148,7 +4165,7 @@ document.addEventListener("keydown", function(e) {
     <input id="edit-today-product-qty" type="number" step="1" min="0" class="input-dark mb-3" placeholder="0" />
 
     <div class="promo-banner mb-4">
-      <p class="text-xs" style="color:rgba(253,246,227,.55);">🔒 Nome, categoria e promoção permanecem inalterados. O Estoque Base também não será modificado.</p>
+      <p class="text-xs" id="edit-today-product-note" style="color:rgba(253,246,227,.55);">Nome, categoria e tipo do produto permanecem inalterados. O Estoque Base também não será modificado.</p>
     </div>
 
     <div class="flex gap-3">
