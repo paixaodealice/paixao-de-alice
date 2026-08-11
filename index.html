@@ -925,6 +925,74 @@ let isAdmin       = false;
 let cartSessionId = null;
 let _confirmLocked = false;
 const _submittedSessionIds = new Set();
+const CART_STORAGE_KEY = "paixaoAliceCartV1";
+let _cartRestoreAttempted = false;
+
+// O carrinho fica salvo somente neste navegador e apenas durante o mesmo dia.
+function localDateKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
+function saveCartLocal() {
+  try {
+    if (!Object.keys(cart).length) {
+      localStorage.removeItem(CART_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify({
+      date: localDateKey(),
+      items: cart,
+      savedAt: Date.now()
+    }));
+  } catch(e) {
+    // O sistema continua funcionando normalmente se o navegador bloquear o armazenamento.
+  }
+}
+
+function clearSavedCart() {
+  try { localStorage.removeItem(CART_STORAGE_KEY); } catch(e) { /* ignore */ }
+}
+
+function restoreCartLocal() {
+  try {
+    const raw = localStorage.getItem(CART_STORAGE_KEY);
+    if (!raw) return;
+
+    const saved = JSON.parse(raw);
+    if (!saved || saved.date !== localDateKey() || !saved.items) {
+      clearSavedCart();
+      return;
+    }
+
+    const restored = {};
+    let adjusted = false;
+    Object.entries(saved.items).forEach(([id, savedQty]) => {
+      const p = products[id];
+      const qty = Math.max(0, Math.floor(Number(savedQty) || 0));
+      const available = Math.max(0, Math.floor(Number(p?.qty) || 0));
+      if (!p || qty < 1 || available < 1) {
+        adjusted = true;
+        return;
+      }
+      restored[id] = Math.min(qty, available);
+      if (restored[id] !== qty) adjusted = true;
+    });
+
+    cart = restored;
+    if (!Object.keys(cart).length) {
+      clearSavedCart();
+      return;
+    }
+
+    saveCartLocal();
+    showToast(adjusted
+      ? "🛒 Seu carrinho foi recuperado e ajustado ao estoque disponível."
+      : "🛒 Seu carrinho foi recuperado.");
+  } catch(e) {
+    clearSavedCart();
+  }
+}
 
 // ── Catálogo base (seed) ─────────────────────────────────────────────
 const DEFAULT_CATALOG = [
@@ -966,6 +1034,10 @@ window._fbListenerReady = true;
 window.addEventListener("firebase-ready", () => {
   window._fb.watchProducts(data => {
     products = data || {};
+    if (!_cartRestoreAttempted) {
+      _cartRestoreAttempted = true;
+      restoreCartLocal();
+    }
     renderProducts();
     if (isAdmin) {
       renderAdminProducts();
@@ -1116,6 +1188,7 @@ function cartInc(id) {
   const before = calcCartTotal();
   cart[id] = current + 1;
   const after = calcCartTotal();
+  saveCartLocal();
 
   updateCartUI();
   renderProducts();
@@ -1132,6 +1205,7 @@ function cartDec(id) {
   if (!cart[id]) return;
   cart[id]--;
   if (cart[id] === 0) delete cart[id];
+  saveCartLocal();
   updateCartUI();
   renderProducts();
 }
@@ -1403,7 +1477,7 @@ async function _doConfirmReserve(paymentStatus) {
     const duplicate = Object.values(orders).find(o => o.cartSessionId === cartSessionId);
     if (alreadySubmitted || duplicate) {
       showToast("Pedido já registrado! ✅");
-      cart = {}; updateCartUI(); renderProducts(); closeCart();
+      cart = {}; clearSavedCart(); updateCartUI(); renderProducts(); closeCart();
       return;
     }
   }
@@ -1493,6 +1567,7 @@ async function _doConfirmReserve(paymentStatus) {
   cartSessionId  = null;
   _confirmLocked = false;
   cart = {};
+  clearSavedCart();
   updateCartUI();
   renderProducts();
   closeCart();
@@ -1504,6 +1579,7 @@ function clearCart() {
   if (!Object.keys(cart).length) return;
   if (!confirm("Esvaziar o carrinho?")) return;
   cart = {};
+  clearSavedCart();
   updateCartUI();
   renderProducts();
   closeCart();
