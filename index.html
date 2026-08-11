@@ -820,7 +820,7 @@
 
       <div class="flex gap-3">
         <button class="btn-outline flex-1 btn-sm" onclick="backToCart()">← Voltar</button>
-        <button class="btn-gold flex-1" id="btn-confirm-reserve" onclick="confirmReserve()">✓ Pago Agora</button>
+        <button class="btn-gold flex-1" id="btn-confirm-reserve" onclick="confirmReserve()">✓ Confirmar Pedido</button>
       </div>
 
     </div>
@@ -990,6 +990,26 @@ window.addEventListener("firebase-ready", () => {
 // ── Cálculo de preço (carrinho global) ───────────────────────────────
 function isBrigadeiro(p) { return p && p.type === "brigadeiro"; }
 function isUva(p)        { return p && p.type === "brigadeiro_uva"; }
+
+// Estado de pagamento centralizado — também interpreta pedidos antigos.
+function getPaymentState(order) {
+  if (!order) return "pending_pix";
+  if (order.paid || order.paymentStatus === "paid") return "paid";
+  if (order.paymentStatus === "conta" || order.paymentMethod === "conta") return "conta";
+  if (order.paymentMethod === "debito" || order.paymentMethod === "credito") return "pending_card";
+  return "pending_pix";
+}
+
+function getPaymentStatusInfo(order) {
+  const state = getPaymentState(order);
+  const map = {
+    paid:         { label:"✓ Pago",              badge:"tag-paid",    action:"" },
+    conta:        { label:"📒 Na conta",         badge:"tag-conta",   action:"✓ Registrar recebimento" },
+    pending_card: { label:"⏳ Aguardando cartão", badge:"tag-pending", action:"✓ Confirmar pagamento" },
+    pending_pix:  { label:"⏳ Aguardando Pix",    badge:"tag-pending", action:"✓ Confirmar pagamento" }
+  };
+  return { state, ...map[state] };
+}
 
 // Calcula o total do carrinho aplicando promo cross-sabor
 function calcCartTotal() {
@@ -1405,7 +1425,11 @@ async function _doConfirmReserve(paymentStatus) {
   // Salvar pedido
   // Determine status: conta if payment method is conta
   const _uvaCalc     = calcCartTotal();
-  const _orderStatus = selectedPayment === "conta" ? "conta" : "pending";
+  const _orderStatus = selectedPayment === "conta"
+    ? "conta"
+    : selectedPayment === "debito"
+      ? "pending_card"
+      : "pending_pix";
 
   // Request push permission so client can receive paid confirmation
   await requestPushPermission();
@@ -1423,7 +1447,7 @@ async function _doConfirmReserve(paymentStatus) {
     uvaResto:      _uvaCalc.uvaResto  || 0,
     uvaDiscount:   (_uvaCalc.totalUva||0)*UVA_PRICE_UNIT - (_uvaCalc.uvaTotal||0),
     total,
-    paymentMethod: selectedPayment === "conta" ? "pix" : selectedPayment,
+    paymentMethod: selectedPayment,
     paymentStatus: _orderStatus,
     cartSessionId: cartSessionId || null,
     paid:          false,
@@ -1536,7 +1560,9 @@ function renderOrders() {
     }
     const total = parseFloat(o.total || o.productPrice || 0);
     const _payLabels = { pix:"💠 Pix", debito:"💳 Déb/Créd", conta:"📒 Na Conta" };
-    const _payBadge = o.paymentMethod ? `<span class="badge badge-cat">${_payLabels[o.paymentMethod]||o.paymentMethod}</span>` : "";
+    const payInfo = getPaymentStatusInfo(o);
+    const displayMethod = payInfo.state === "conta" ? "conta" : o.paymentMethod;
+    const _payBadge = displayMethod ? `<span class="badge badge-cat">${_payLabels[displayMethod]||displayMethod}</span>` : "";
     return `
     <div class="card p-4 tbl-row">
       <div class="flex items-start justify-between gap-2 mb-1">
@@ -1551,12 +1577,12 @@ function renderOrders() {
             ${o.brigDiscount > 0 ? `<span style="color:#4ade80;"> · Desconto R$ ${parseFloat(o.brigDiscount).toFixed(2).replace(".",",")}</span>` : ""}
           </p>
         </div>
-        <span class="badge flex-shrink-0 ${o.paid ? 'tag-paid' : 'tag-conta'}">
-          ${o.paid ? '✓ Pago' : '📒 Na conta'}
+        <span class="badge flex-shrink-0 ${payInfo.badge}">
+          ${payInfo.label}
         </span>
       </div>
       <div class="flex gap-2 mt-3">
-        ${!o.paid ? `<button class="btn-gold btn-sm flex-1" onclick="markPaid('${id}')">✓ Pago</button>` : ""}
+        ${payInfo.state !== "paid" ? `<button class="btn-gold btn-sm flex-1" onclick="markPaid('${id}')">${payInfo.action}</button>` : ""}
         <button class="btn-outline btn-sm btn-danger flex-1" onclick="deleteOrder('${id}')">🗑 Excluir</button>
       </div>
     </div>`;
@@ -1991,20 +2017,20 @@ function renderPendencias() {
     .filter(([,o]) => !search || (o.collaborator||"").toLowerCase().includes(search))
     .sort((a,b) => (b[1].createdAt||0) - (a[1].createdAt||0));
 
-  const totalConta    = allUnpaid.reduce((s,[,o]) => s + parseFloat(o.total||o.productPrice||0), 0);
+  const totalReceber  = allUnpaid.reduce((s,[,o]) => s + parseFloat(o.total||o.productPrice||0), 0);
   const uniqueClients = new Set(allUnpaid.map(([,o]) => o.collaborator)).size;
 
   const kpiEl = document.getElementById("fin-pending-kpis");
   if (kpiEl) kpiEl.innerHTML = `
     <div class="stat-card" style="border-color:rgba(139,92,246,.3);">
-      <p class="text-xs cinzel mb-1" style="color:#a78bfa;">📒 NA CONTA</p>
-      <p class="text-xl font-bold cinzel" style="color:#a78bfa;">${fmt(totalConta)}</p>
+      <p class="text-xs cinzel mb-1" style="color:#a78bfa;">💰 A RECEBER</p>
+      <p class="text-xl font-bold cinzel" style="color:#a78bfa;">${fmt(totalReceber)}</p>
       <p class="text-xs mt-1" style="color:rgba(253,246,227,.35);">${allUnpaid.length} pedido${allUnpaid.length!==1?"s":""}</p>
     </div>
     <div class="stat-card">
       <p class="text-xs cinzel mb-1" style="color:var(--gold-lt);">CLIENTES</p>
       <p class="text-xl font-bold cinzel gold-text">${uniqueClients}</p>
-      <p class="text-xs mt-1" style="color:rgba(253,246,227,.35);">com conta aberta</p>
+      <p class="text-xs mt-1" style="color:rgba(253,246,227,.35);">com pagamento pendente</p>
     </div>`;
 
   const listEl = document.getElementById("fin-pending-list");
@@ -2014,6 +2040,7 @@ function renderPendencias() {
   }
   listEl.innerHTML = allUnpaid.map(([id,o]) => {
     const val  = parseFloat(o.total||o.productPrice||0);
+    const payInfo = getPaymentStatusInfo(o);
     const time = new Date(o.createdAt||0).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
     const itemsLabel = o.items ? o.items.map(i=>`${i.productName} ×${i.qty}`).join(", ") : (o.productName||"");
     return `
@@ -2027,11 +2054,11 @@ function renderPendencias() {
         </div>
         <div class="text-right flex-shrink-0">
           <p class="cinzel font-bold" style="color:#a78bfa;font-size:.9rem;">${fmt(val)}</p>
-          <span class="badge tag-conta" style="font-size:.6rem;">📒 Na conta</span>
+          <span class="badge ${payInfo.badge}" style="font-size:.6rem;">${payInfo.label}</span>
         </div>
       </div>
       <div class="flex gap-2 mt-2">
-        <button class="btn-gold btn-sm flex-1" onclick="markPaid('${id}')">✓ Recebido</button>
+        <button class="btn-gold btn-sm flex-1" onclick="markPaid('${id}')">${payInfo.action}</button>
         <button class="btn-outline btn-sm btn-danger flex-1" onclick="deleteOrder('${id}')">🗑 Excluir</button>
         <button class="btn-outline btn-sm flex-1" onclick="editOrderModal('${id}')">✏️ Editar</button>
       </div>
@@ -2071,18 +2098,19 @@ function renderClientes() {
       .sort((a,b) => (b.createdAt||0) - (a.createdAt||0))
       .map(o => {
         const oVal = parseFloat(o.total||o.productPrice||0);
+        const payInfo = getPaymentStatusInfo(o);
         const items = o.items ? o.items.map(i=>`${i.productName} ×${i.qty}`).join(", ") : (o.productName||"");
         const oTime = new Date(o.createdAt||0).toLocaleDateString("pt-BR");
         return `<div style="padding:.5rem 0;border-bottom:1px solid rgba(201,146,42,.1);">
           <div class="flex justify-between items-start gap-2" style="font-size:.75rem;">
             <div>
               <div style="color:rgba(253,246,227,.7);">${esc(items)}</div>
-              <div style="color:rgba(253,246,227,.3);margin-top:1px;">${oTime} · <span style="color:${o.paid?"#4ade80":"#a78bfa"};">${o.paid?"✓ Pago":"📒 Na conta"}</span></div>
+              <div style="color:rgba(253,246,227,.3);margin-top:1px;">${oTime} · <span style="color:${payInfo.state==="paid"?"#4ade80":payInfo.state==="conta"?"#a78bfa":"#fbbf24"};">${payInfo.label}</span></div>
             </div>
             <span style="color:${o.paid?"#4ade80":"#fbbf24"};font-weight:700;white-space:nowrap;">${fmt(oVal)}</span>
           </div>
           <div class="flex gap-1 mt-1">
-            ${!o.paid ? `<button class="btn-gold btn-sm" style="font-size:.65rem;padding:.2rem .55rem;" onclick="markPaid('${o.id}')">✓ Pago</button>` : ""}
+            ${payInfo.state !== "paid" ? `<button class="btn-gold btn-sm" style="font-size:.65rem;padding:.2rem .55rem;" onclick="markPaid('${o.id}')">${payInfo.action}</button>` : ""}
             <button class="btn-outline btn-sm btn-danger" style="font-size:.65rem;padding:.2rem .55rem;" onclick="deleteOrder('${o.id}')">🗑</button>
             <button class="btn-outline btn-sm" style="font-size:.65rem;padding:.2rem .55rem;" onclick="editOrderModal('${o.id}')">✏️</button>
           </div>
@@ -2128,7 +2156,8 @@ function editOrderModal(id) {
   document.getElementById("edit-items-label").value = itemsLabel;
 
   // Set status radio
-  const status = o.paid ? "paid" : "conta";  // all unpaid = conta
+  const currentState = getPaymentState(o);
+  const status = currentState === "paid" ? "paid" : currentState === "conta" ? "conta" : "pending";
   const radioEl = document.getElementById("edit-status-" + status);
   if (radioEl) radioEl.checked = true;
 
@@ -2149,6 +2178,17 @@ async function saveEditOrder() {
   const newStatus   = statusRadio ? statusRadio.value : "pending";
   const isPaid      = newStatus === "paid";
 
+  let finalPaymentMethod = orders[id]?.paymentMethod || "pix";
+  if (newStatus === "conta") finalPaymentMethod = "conta";
+  if (newStatus === "pending" && finalPaymentMethod === "conta") finalPaymentMethod = "pix";
+  const finalPaymentStatus = isPaid
+    ? "paid"
+    : newStatus === "conta"
+      ? "conta"
+      : (finalPaymentMethod === "debito" || finalPaymentMethod === "credito")
+        ? "pending_card"
+        : "pending_pix";
+
   if (!name || isNaN(total) || total < 0) {
     showToast("Preencha cliente e valor ⚠️"); return;
   }
@@ -2158,7 +2198,8 @@ async function saveEditOrder() {
     total,
     obs:           obs || null,
     paid:          isPaid,
-    paymentStatus: newStatus,
+    paymentMethod: finalPaymentMethod,
+    paymentStatus: finalPaymentStatus,
     productPrice:  total,
     productName:   label || null,
   };
@@ -2228,7 +2269,7 @@ function selectPayment(method) {
       btn.style.background = "linear-gradient(135deg,#7c3aed,#a78bfa)";
       btn.style.color = "#fff";
     } else {
-      btn.textContent = "✓ Pago Agora";
+      btn.textContent = "✓ Confirmar Pedido";
       btn.style.background = "";
       btn.style.color = "";
     }
@@ -2621,7 +2662,7 @@ function openCRMProfile(name) {
       </div>
       ${c.totalPending > 0 ? `
       <div class="promo-banner" style="border-color:rgba(251,191,36,.3);">
-        <p class="text-xs" style="color:#a78bfa;">📒 Na conta a receber: <strong>${fmt(c.totalPending)}</strong></p>
+        <p class="text-xs" style="color:#fbbf24;">⏳ Aguardando pagamento: <strong>${fmt(c.totalPending)}</strong></p>
       </div>` : ""}
 
       <!-- Payment progress -->
@@ -2665,8 +2706,9 @@ function openCRMProfile(name) {
         const val   = o._val;
         const items = o.items ? o.items.map(i=>`${i.productName} ×${i.qty}`).join(", ") : (o.productName||"");
         const date  = new Date(o.createdAt||0).toLocaleDateString("pt-BR");
-        const statusColor = o._status==="paid" ? "#4ade80" : "#a78bfa";
-        const statusLabel = o._status==="paid" ? "✓ Pago" : "📒 Na conta";
+        const payInfo = getPaymentStatusInfo(o);
+        const statusColor = payInfo.state==="paid" ? "#4ade80" : payInfo.state==="conta" ? "#a78bfa" : "#fbbf24";
+        const statusLabel = payInfo.label;
         return `<div class="card p-3">
           <div class="flex justify-between items-start gap-2">
             <div class="flex-1 min-w-0">
@@ -2679,7 +2721,7 @@ function openCRMProfile(name) {
             </div>
           </div>
           <div class="flex gap-1 mt-2">
-            ${o._status !== "paid" ? `<button class="btn-gold btn-sm" style="font-size:.65rem;padding:.2rem .6rem;" onclick="markPaid('${o.id}');openCRMProfile('${esc(c.name)}')">✓ Pago</button>` : ""}
+            ${payInfo.state !== "paid" ? `<button class="btn-gold btn-sm" style="font-size:.65rem;padding:.2rem .6rem;" onclick="markPaid('${o.id}');openCRMProfile('${esc(c.name)}')">${payInfo.action}</button>` : ""}
             <button class="btn-outline btn-sm" style="font-size:.65rem;padding:.2rem .6rem;" onclick="editOrderModal('${o.id}')">✏️ Editar</button>
           </div>
         </div>`;
@@ -2706,10 +2748,12 @@ function closeDayStep1() {
   const allOrders = Object.values(orders).filter(o =>
     (o.createdAt||0) >= todayStart.getTime()
   );
-  const paid    = allOrders.filter(o => o.paid);
-  const conta   = allOrders.filter(o => !o.paid);
+  const paid    = allOrders.filter(o => getPaymentState(o) === "paid");
+  const conta   = allOrders.filter(o => getPaymentState(o) === "conta");
+  const awaiting= allOrders.filter(o => ["pending_pix","pending_card"].includes(getPaymentState(o)));
   const totalPaid  = paid.reduce((s,o)  => s + parseFloat(o.total||o.productPrice||0), 0);
   const totalConta = conta.reduce((s,o) => s + parseFloat(o.total||o.productPrice||0), 0);
+  const totalAwaiting = awaiting.reduce((s,o) => s + parseFloat(o.total||o.productPrice||0), 0);
   const totalProducts = Object.keys(products).length;
 
   document.getElementById("close-day-summary").innerHTML = `
@@ -2724,9 +2768,14 @@ function closeDayStep1() {
         <p class="cinzel font-bold" style="color:#a78bfa;font-size:1rem;">${fmt(totalConta)}</p>
         <p class="text-xs" style="color:rgba(253,246,227,.35);">${conta.length} pedido${conta.length!==1?"s":""}</p>
       </div>
+      <div class="stat-card py-2 col-span-2" style="border-color:rgba(251,191,36,.3);">
+        <p class="text-xs cinzel mb-0.5" style="color:#fbbf24;font-size:.6rem;letter-spacing:.07em;">AGUARDANDO PAGAMENTO</p>
+        <p class="cinzel font-bold" style="color:#fbbf24;font-size:1rem;">${fmt(totalAwaiting)}</p>
+        <p class="text-xs" style="color:rgba(253,246,227,.35);">${awaiting.length} pedido${awaiting.length!==1?"s":""} via Pix/cartão</p>
+      </div>
       <div class="stat-card py-2 col-span-2">
         <p class="text-xs cinzel mb-0.5" style="color:var(--gold-lt);font-size:.6rem;letter-spacing:.07em;">FATURADO NO DIA</p>
-        <p class="cinzel font-bold gold-text" style="font-size:1.1rem;">${fmt(totalPaid + totalConta)}</p>
+        <p class="cinzel font-bold gold-text" style="font-size:1.1rem;">${fmt(totalPaid + totalConta + totalAwaiting)}</p>
         <p class="text-xs" style="color:rgba(253,246,227,.35);">${allOrders.length} pedido${allOrders.length!==1?"s":" total"} · ${totalProducts} produto${totalProducts!==1?"s":""} no cardápio</p>
       </div>
     </div>`;
@@ -2762,13 +2811,15 @@ async function confirmCloseDay() {
 
     const allOrderEntries = Object.entries(orders);
     const paidOrders  = allOrderEntries.filter(([,o]) =>
-      o.paid && (o.createdAt||0) >= todayStart.getTime()
+      getPaymentState(o) === "paid" && (o.createdAt||0) >= todayStart.getTime()
     );
-    const contaOrders = allOrderEntries.filter(([,o]) => !o.paid);
+    const contaOrders = allOrderEntries.filter(([,o]) => getPaymentState(o) === "conta");
+    const pendingOrders = allOrderEntries.filter(([,o]) => ["pending_pix","pending_card"].includes(getPaymentState(o)));
 
     // Build snapshot for archive (read-only record — orders are NOT modified)
     const totalPaid  = paidOrders.reduce((s,[,o])  => s + parseFloat(o.total||o.productPrice||0), 0);
     const totalConta = contaOrders.reduce((s,[,o]) => s + parseFloat(o.total||o.productPrice||0), 0);
+    const totalPending = pendingOrders.reduce((s,[,o]) => s + parseFloat(o.total||o.productPrice||0), 0);
     const sanitizeKey = k => String(k||"").replace(/[.#$\/\[\]]/g, "_").trim() || "produto";
     const prodCount = {};
     allOrderEntries.forEach(([,o]) => {
@@ -2785,10 +2836,12 @@ async function confirmCloseDay() {
       closedAt:     now,
       totalPaid,
       totalConta,
-      totalFaturado: totalPaid + totalConta,
+      totalPending,
+      totalFaturado: totalPaid + totalConta + totalPending,
       ordersCount:  allOrderEntries.length,
       paidCount:    paidOrders.length,
       contaCount:   contaOrders.length,
+      pendingCount: pendingOrders.length,
       topProducts:  prodCount,
     });
 
@@ -2866,8 +2919,12 @@ function exportCSV() {
     const date  = d.toLocaleDateString("pt-BR");
     const time  = d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
     const items = o.items ? o.items.map(i=>`${i.productName} x${i.qty}`).join(" | ") : (o.productName||"");
-    const pay   = { pix:"Pix", debito:"Débito/Crédito", conta:"Na conta" }[o.paymentMethod] || o.paymentMethod || "";
-    const status= o.paid ? "Pago" : "Na conta";
+    const payInfo = getPaymentStatusInfo(o);
+    const payMethod = payInfo.state === "conta" ? "conta" : o.paymentMethod;
+    const pay   = { pix:"Pix", debito:"Débito/Crédito", conta:"Na conta" }[payMethod] || payMethod || "";
+    const status= {
+      paid:"Pago", conta:"Na conta", pending_card:"Aguardando cartão", pending_pix:"Aguardando Pix"
+    }[payInfo.state];
     const total = parseFloat(o.total||o.productPrice||0).toFixed(2).replace(".",",");
     rows.push([date, time, o.collaborator||"", items, pay, status, total, o.obs||""]);
   });
@@ -3586,6 +3643,11 @@ function renderArchiveDays() {
           <p class="cinzel font-bold" style="color:#a78bfa;font-size:.9rem;">${fmt(d.totalConta||0)}</p>
           <p style="font-size:.65rem;color:rgba(253,246,227,.3);">${d.contaCount||0} pedidos</p>
         </div>
+        ${(d.totalPending||0) > 0 ? `<div style="grid-column:1/-1;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:8px;padding:.5rem .75rem;">
+          <p style="font-size:.6rem;color:#fbbf24;font-family:'Cinzel',serif;letter-spacing:.06em;">AGUARDANDO PAGAMENTO</p>
+          <p class="cinzel font-bold" style="color:#fbbf24;font-size:.9rem;">${fmt(d.totalPending||0)}</p>
+          <p style="font-size:.65rem;color:rgba(253,246,227,.3);">${d.pendingCount||0} pedidos</p>
+        </div>` : ""}
       </div>
       ${topProds ? `<p class="text-xs" style="color:rgba(253,246,227,.4);">🏆 Mais vendidos: ${topProds}</p>` : ""}
       ${d.paidOrders && Object.keys(d.paidOrders).length > 0 ? `
@@ -3610,9 +3672,13 @@ function shareWhatsAppSummary() {
 
   if (!todayOrders.length) { showToast("Nenhum pedido hoje ainda!"); return; }
 
-  const totalPaid   = todayOrders.filter(o=>o.paid).reduce((s,o)=>s+parseFloat(o.total||o.productPrice||0),0);
-  const totalConta  = todayOrders.filter(o=>!o.paid).reduce((s,o)=>s+parseFloat(o.total||o.productPrice||0),0);
-  const totalGeral  = totalPaid + totalConta;
+  const paidOrders = todayOrders.filter(o=>getPaymentState(o)==="paid");
+  const contaOrders = todayOrders.filter(o=>getPaymentState(o)==="conta");
+  const awaitingOrders = todayOrders.filter(o=>["pending_pix","pending_card"].includes(getPaymentState(o)));
+  const totalPaid   = paidOrders.reduce((s,o)=>s+parseFloat(o.total||o.productPrice||0),0);
+  const totalConta  = contaOrders.reduce((s,o)=>s+parseFloat(o.total||o.productPrice||0),0);
+  const totalAwaiting = awaitingOrders.reduce((s,o)=>s+parseFloat(o.total||o.productPrice||0),0);
+  const totalGeral  = totalPaid + totalConta + totalAwaiting;
   const today       = new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"});
 
   // Top 3 products
@@ -3627,8 +3693,9 @@ function shareWhatsAppSummary() {
   const msg = `🍬 *Paixão de Alice — Resumo do Dia*\n`
     + `📅 ${today}\n\n`
     + `💰 *Faturado:* ${fmt(totalGeral)}\n`
-    + `✅ *Recebido:* ${fmt(totalPaid)} (${todayOrders.filter(o=>o.paid).length} pedidos)\n`
-    + `📒 *Na conta:* ${fmt(totalConta)} (${todayOrders.filter(o=>!o.paid).length} pedidos)\n\n`
+    + `✅ *Recebido:* ${fmt(totalPaid)} (${paidOrders.length} pedidos)\n`
+    + `⏳ *Aguardando pagamento:* ${fmt(totalAwaiting)} (${awaitingOrders.length} pedidos)\n`
+    + `📒 *Na conta:* ${fmt(totalConta)} (${contaOrders.length} pedidos)\n\n`
     + `🏆 *Mais vendidos:*\n${top3}\n\n`
     + `📦 *Total de pedidos:* ${todayOrders.length}`;
 
@@ -3751,7 +3818,7 @@ async function saveRetroOrder() {
       productPrice:  total,
       productName:   itemsLabel,
       paymentMethod: status === "paid" ? "pix" : "conta",
-      paymentStatus: status === "paid" ? "pending" : "conta",
+      paymentStatus: status === "paid" ? "paid" : "conta",
       paid:          status === "paid",
       isRetroactive: true,
       createdAt:     ts,
@@ -3956,6 +4023,9 @@ document.addEventListener("keydown", function(e) {
         <input type="radio" name="edit-status" id="edit-status-conta" value="conta" style="accent-color:#a78bfa;" /> <span style="color:#a78bfa;">📒 Na Conta</span>
       </label>
       <label class="flex items-center gap-2 cursor-pointer text-sm flex-1 card p-2">
+        <input type="radio" name="edit-status" id="edit-status-pending" value="pending" style="accent-color:#fbbf24;" /> <span style="color:#fbbf24;">⏳ Aguardando</span>
+      </label>
+      <label class="flex items-center gap-2 cursor-pointer text-sm flex-1 card p-2">
         <input type="radio" name="edit-status" id="edit-status-paid"  value="paid"  style="accent-color:#4ade80;" /> <span style="color:#4ade80;">✓ Pago</span>
       </label>
     </div>
@@ -4009,6 +4079,7 @@ document.addEventListener("keydown", function(e) {
         <li class="mb-1">✅ Arquivar todos os pedidos <strong style="color:#4ade80;">Pagos</strong> do dia</li>
         <li class="mb-1">🍬 Zerar o <strong style="color:var(--gold-lt);">Cardápio ativo</strong></li>
         <li class="mb-1">📒 Manter pedidos <strong style="color:#a78bfa;">Na conta</strong> para cobrança</li>
+        <li class="mb-1">⏳ Manter pedidos com <strong style="color:#fbbf24;">pagamento aguardando confirmação</strong></li>
         <li class="mb-1">📊 Salvar snapshot do dia no <strong style="color:var(--gold-lt);">Histórico</strong></li>
       </ul>
       <div class="gold-line mb-3"></div>
