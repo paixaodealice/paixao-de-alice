@@ -2957,7 +2957,12 @@ async function shareMenu() {
     text += `${catEmoji[cat]||"✨"} *${cat}*\n`;
     items.forEach(p => {
       const isBrig = p.type === "brigadeiro";
-      const price  = isBrig ? "R$ 4,50 un. | Kit 4 = R$ 15,00" : `R$ ${parseFloat(p.price).toFixed(2).replace(".",",")}`;
+      const isUvaProd = p.type === "brigadeiro_uva";
+      const price = isBrig
+        ? "R$ 4,50 un. | Kit 4 = R$ 15,00"
+        : isUvaProd
+          ? "R$ 5,00 un. | Kit 4 = R$ 18,00"
+          : `R$ ${parseFloat(p.price).toFixed(2).replace(".",",")}`;
       text += `  • ${p.name} — ${price}\n`;
     });
     text += "\n";
