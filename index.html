@@ -1744,6 +1744,7 @@ function renderAdminProducts() {
       <div class="flex gap-1 items-center flex-shrink-0">
         <button class="btn-outline btn-sm px-2 py-1" style="min-width:28px;" onclick="changeQtyAdmin('${p.id}',1)">+</button>
         <button class="btn-outline btn-sm px-2 py-1" style="min-width:28px;" onclick="changeQtyAdmin('${p.id}',-1)">−</button>
+        <button class="btn-outline btn-sm px-2 py-1" onclick="openEditTodayProduct('${p.id}')">✏️ Editar</button>
         <button class="btn-outline btn-sm btn-danger px-2 py-1" onclick="deleteProduct('${p.id}')">🗑</button>
       </div>
     </div>`).join("")}
@@ -1782,6 +1783,44 @@ async function addProduct() {
 async function changeQtyAdmin(id, delta) {
   const p = products[id]; if (!p) return;
   await window._fb.updateProduct(id, { qty: Math.max(0, (p.qty||0) + delta) });
+}
+
+// ── Editar preço e quantidade do Cardápio de Hoje ─────────────────────
+function openEditTodayProduct(id) {
+  const p = products[id];
+  if (!p) { showToast("Produto não encontrado"); return; }
+  document.getElementById("edit-today-product-id").value = id;
+  document.getElementById("edit-today-product-name").textContent = p.name || "Produto";
+  document.getElementById("edit-today-product-price").value = parseFloat(p.price || 0).toFixed(2);
+  document.getElementById("edit-today-product-qty").value = Math.max(0, parseInt(p.qty || 0));
+  document.getElementById("modal-edit-today-product").classList.remove("hidden");
+  setTimeout(() => document.getElementById("edit-today-product-price").focus(), 100);
+}
+
+function closeEditTodayProduct() {
+  document.getElementById("modal-edit-today-product").classList.add("hidden");
+}
+
+async function saveEditTodayProduct() {
+  const id    = document.getElementById("edit-today-product-id").value;
+  const price = parseFloat(document.getElementById("edit-today-product-price").value);
+  const qty   = parseInt(document.getElementById("edit-today-product-qty").value);
+  if (!id || !products[id]) { showToast("Produto não encontrado"); return; }
+  if (isNaN(price) || price < 0 || isNaN(qty) || qty < 0) {
+    showToast("Informe preço e quantidade válidos ⚠️"); return;
+  }
+
+  const btn = document.getElementById("btn-save-edit-today-product");
+  if (btn) { btn.disabled = true; btn.textContent = "Salvando…"; }
+  try {
+    await window._fb.updateProduct(id, { price, qty });
+    closeEditTodayProduct();
+    showToast("✅ Cardápio de hoje atualizado!");
+  } catch(e) {
+    showToast("❌ Não foi possível salvar. Tente novamente.");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "✓ Salvar alterações"; }
+  }
 }
 
 async function deleteProduct(id) {
@@ -4092,6 +4131,32 @@ document.addEventListener("keydown", function(e) {
 // ══════════════════════════════════════════════════════════════════
 
 </script>
+
+<!-- ══ MODAL: EDITAR PRODUTO DO CARDÁPIO DE HOJE ═══════════════════ -->
+<div id="modal-edit-today-product" class="modal-overlay modal-overlay-center hidden">
+  <div class="modal-box" style="max-width:400px;">
+    <h3 class="cinzel gold-text text-lg font-bold mb-1">Editar Produto de Hoje</h3>
+    <p class="text-sm mb-1" id="edit-today-product-name" style="color:var(--cream);"></p>
+    <p class="text-xs mb-3" style="color:rgba(253,246,227,.4);">A alteração vale somente para o Cardápio de Hoje.</p>
+    <div class="gold-line mb-4"></div>
+    <input type="hidden" id="edit-today-product-id" />
+
+    <label class="text-xs block mb-1" style="color:var(--gold-lt);letter-spacing:.08em;font-family:'Cinzel',serif;">PREÇO DE HOJE (R$)</label>
+    <input id="edit-today-product-price" type="number" step="0.01" min="0" class="input-dark mb-3" placeholder="0,00" />
+
+    <label class="text-xs block mb-1" style="color:var(--gold-lt);letter-spacing:.08em;font-family:'Cinzel',serif;">QUANTIDADE DISPONÍVEL</label>
+    <input id="edit-today-product-qty" type="number" step="1" min="0" class="input-dark mb-3" placeholder="0" />
+
+    <div class="promo-banner mb-4">
+      <p class="text-xs" style="color:rgba(253,246,227,.55);">🔒 Nome, categoria e promoção permanecem inalterados. O Estoque Base também não será modificado.</p>
+    </div>
+
+    <div class="flex gap-3">
+      <button class="btn-outline flex-1 btn-sm" onclick="closeEditTodayProduct()">Cancelar</button>
+      <button class="btn-gold flex-1 btn-sm" id="btn-save-edit-today-product" onclick="saveEditTodayProduct()">✓ Salvar alterações</button>
+    </div>
+  </div>
+</div>
 
 <!-- ══ MODAL: EDITAR PEDIDO ══════════════════════════════════════════ -->
 <div id="modal-edit-order" class="modal-overlay modal-overlay-center hidden">
