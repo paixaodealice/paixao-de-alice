@@ -75,6 +75,7 @@
       updateProduct:    (id,d)  => fbCall("updateProduct",    () => update(ref(db,`products/${id}`), d)),
       deleteProduct:    (id)    => fbCall("deleteProduct",    () => remove(ref(db,`products/${id}`))),
       addOrder:         (d)     => fbCall("addOrder",         () => push(ref(db,"orders"), d)),
+      setOrder:         (id,d)  => fbCall("setOrder",         () => set(ref(db,`orders/${id}`), d)),
       updateOrder:      (id,d)  => fbCall("updateOrder",      () => update(ref(db,`orders/${id}`), d)),
       deleteOrder:      (id)    => fbCall("deleteOrder",      () => remove(ref(db,`orders/${id}`))),
       addCatalogItem:   (d)     => fbCall("addCatalogItem",   () => push(ref(db,"catalog"), d)),
@@ -923,6 +924,7 @@ let cart          = {};
 let isAdmin       = false;
 let cartSessionId = null;
 let _confirmLocked = false;
+const _submittedSessionIds = new Set();
 
 // ── Catálogo base (seed) ─────────────────────────────────────────────
 const DEFAULT_CATALOG = [
@@ -1358,6 +1360,16 @@ function backToCart() {
   document.getElementById("cart-step-1").classList.remove("hidden");
 }
 
+// Prepara o botão para uma nova tentativa ou para um novo cliente.
+function resetConfirmControl() {
+  _confirmLocked = false;
+  const btn = document.getElementById("btn-confirm-reserve");
+  if (btn) {
+    btn.disabled = false;
+    btn.style.opacity = "";
+  }
+}
+
 async function confirmReserve(paymentStatus) {
   // Hard lock — prevent any re-entry (double tap, slow network, etc.)
   if (_confirmLocked) { showToast("Aguarde, processando seu pedido…"); return; }
@@ -1387,8 +1399,9 @@ async function _doConfirmReserve(paymentStatus) {
 
   // Idempotency check: has this exact cartSessionId already been saved?
   if (cartSessionId) {
+    const alreadySubmitted = _submittedSessionIds.has(cartSessionId);
     const duplicate = Object.values(orders).find(o => o.cartSessionId === cartSessionId);
-    if (duplicate) {
+    if (alreadySubmitted || duplicate) {
       showToast("Pedido já registrado! ✅");
       cart = {}; updateCartUI(); renderProducts(); closeCart();
       return;
@@ -1434,7 +1447,13 @@ async function _doConfirmReserve(paymentStatus) {
   // Request push permission so client can receive paid confirmation
   await requestPushPermission();
 
-  await window._fb.addOrder({
+  // A própria sessão é a chave do pedido. Repetir a mesma tentativa apenas
+  // regrava o mesmo registro, em vez de criar um pedido duplicado.
+  if (!cartSessionId) {
+    cartSessionId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+  const submittedSessionId = cartSessionId;
+  await window._fb.setOrder(submittedSessionId, {
     collaborator:  name,
     obs:           obs || null,
     items,
@@ -1453,6 +1472,7 @@ async function _doConfirmReserve(paymentStatus) {
     paid:          false,
     createdAt:     Date.now()
   });
+  _submittedSessionIds.add(submittedSessionId);
 
   // Award clube point if eligible
   await checkAndAwardClubePoint(name, total);
@@ -2403,7 +2423,7 @@ const _origGoToCheckout = goToCheckout;
 goToCheckout = function() {
   // Generate fresh session id for this checkout attempt
   cartSessionId  = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  _confirmLocked = false;
+  resetConfirmControl();
   _origGoToCheckout();
   selectPayment("pix");
   applyMaquininhaState(maquininhaOn);
