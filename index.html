@@ -250,6 +250,29 @@
     /* Cart item row */
     .cart-item { display:flex; align-items:center; gap:.75rem; padding:.65rem 0; border-bottom:1px solid var(--border); }
     .cart-item:last-child { border-bottom:none; }
+    .cart-header-count { color:rgba(253,246,227,.38); font-size:.7rem; margin-bottom:.7rem; }
+    .cart-kit-celebration { display:flex; align-items:center; gap:.65rem; }
+    .cart-kit-celebration-icon {
+      width:34px; height:34px; border-radius:50%; display:flex; align-items:center;
+      justify-content:center; background:rgba(201,146,42,.16); flex-shrink:0; font-size:1rem;
+    }
+    .cart-kit-celebration-title {
+      color:#fbbf24; font-family:'Cinzel',serif; font-size:.7rem;
+      font-weight:700; letter-spacing:.055em;
+    }
+    .cart-kit-celebration-save { color:#4ade80; font-size:.68rem; margin-top:.12rem; }
+    .cart-kit-next { color:rgba(253,246,227,.42); font-size:.65rem; margin-top:.35rem; line-height:1.4; }
+    .cart-kit-hint { color:#fbbf24; font-size:.72rem; line-height:1.45; }
+    .cart-totals-card {
+      background:#100c04; border:1px solid var(--border); border-radius:11px;
+      padding:.7rem .85rem; margin-top:.55rem;
+    }
+    .cart-discount-row { color:#4ade80; font-size:.76rem; }
+    .cart-total-divider { height:1px; background:var(--border); margin:.4rem 0; }
+    .cart-total-row { padding:.48rem 0 .2rem; }
+    .cart-total-value { font-size:1.08rem; }
+    .cart-total-saving { color:#4ade80; font-size:.66rem; text-align:right; margin-top:.08rem; }
+    .cart-total-note { color:rgba(253,246,227,.34); font-size:.65rem; text-align:center; margin-top:.65rem; }
     /* Order summary */
     .summary-row { display:flex; justify-content:space-between; align-items:center; padding:.4rem 0; font-size:.85rem; }
     .summary-divider { height:1px; background:var(--border); margin:.5rem 0; }
@@ -866,10 +889,11 @@
 
     <div id="cart-step-1">
       <h3 class="cinzel gold-text text-lg font-bold mb-1">Seu Carrinho</h3>
+      <p id="cart-header-count" class="cart-header-count">0 itens no pedido</p>
 
       <!-- Kit summary (aparece quando há brigadeiros) -->
       <div id="cart-kit-summary" class="hidden promo-banner mb-3 mt-1">
-        <p class="text-xs font-bold" style="color:#fbbf24;" id="cart-kit-text"></p>
+        <div id="cart-kit-text"></div>
       </div>
 
       <div class="gold-line mb-3"></div>
@@ -1480,6 +1504,11 @@ function closeCart() {
 function renderCartModal() {
   const keys = Object.keys(cart);
   const { total, totalBrig, kits, resto, brigTotal } = calcCartTotal();
+  const cartCount = cartItemCount();
+  const cartHeaderCount = document.getElementById("cart-header-count");
+  if (cartHeaderCount) {
+    cartHeaderCount.textContent = `${cartCount} ite${cartCount===1?'m':'ns'} no pedido`;
+  }
 
   // Items list
   let itemsHtml = "";
@@ -1554,37 +1583,33 @@ function renderCartModal() {
 
   if (hasBrig || hasUva) {
     kitSumEl.classList.remove("hidden");
-    let kitMsg = "";
-    if (hasBrig) {
-      if (kits > 0) {
-        const kitQtyBrig = kits * PROMO_QTY;
-        const ecoBrig = totalBrig * PRICE_UNIT - brigTotal;
-        kitMsg += `🎉 ${kits} Kit${kits>1?'s':''} de Brigadeiros completo${kits>1?'s':''}! `;
-        kitMsg += `${kitQtyBrig} unidades por R$ ${(kits*PROMO_KIT).toFixed(2).replace(".",",")}`;
-        if (resto > 0) {
-          kitMsg += ` + ${resto} unidade${resto>1?'s':''} avulsa${resto>1?'s':''} por R$ ${(resto*PRICE_UNIT).toFixed(2).replace(".",",")}`;
-        }
-        kitMsg += `. Você economizou R$ ${ecoBrig.toFixed(2).replace(".",",")}.`;
-      } else {
-        kitMsg += `💡 Faltam ${PROMO_QTY - resto} brigadeiro${PROMO_QTY-resto>1?'s':''} para o kit`;
-      }
+    const ecoBrig = kits > 0 ? (totalBrig * PRICE_UNIT) - brigTotal : 0;
+    const ecoUva  = uvaKits > 0 ? (totalUva * UVA_PRICE_UNIT) - uvaTotal : 0;
+    const completedKits = kits + uvaKits;
+    const totalEconomy  = ecoBrig + ecoUva;
+    const nextHints = [];
+    if (hasBrig && resto > 0) {
+      const missingBrig = PROMO_QTY - resto;
+      nextHints.push(`Faltam ${missingBrig} brigadeiro${missingBrig!==1?'s':''} para o próximo kit`);
     }
-    if (hasUva) {
-      if (kitMsg) kitMsg += "  |  ";
-      if (uvaKits > 0) {
-        const kitQtyUva = uvaKits * UVA_KIT_QTY;
-        const ecoUva = totalUva * UVA_PRICE_UNIT - uvaTotal;
-        kitMsg += `🎉 ${uvaKits} Kit${uvaKits>1?'s':''} de Surpresa de Uva completo${uvaKits>1?'s':''}! `;
-        kitMsg += `${kitQtyUva} unidades por R$ ${(uvaKits*UVA_KIT_PRICE).toFixed(2).replace(".",",")}`;
-        if (uvaResto > 0) {
-          kitMsg += ` + ${uvaResto} unidade${uvaResto>1?'s':''} avulsa${uvaResto>1?'s':''} por R$ ${(uvaResto*UVA_PRICE_UNIT).toFixed(2).replace(".",",")}`;
-        }
-        kitMsg += `. Você economizou R$ ${ecoUva.toFixed(2).replace(".",",")}.`;
-      } else {
-        kitMsg += `💡 Faltam ${UVA_KIT_QTY - uvaResto} Surpresa de Uva para o kit`;
-      }
+    if (hasUva && uvaResto > 0) {
+      const missingUva = UVA_KIT_QTY - uvaResto;
+      nextHints.push(`Faltam ${missingUva} Surpresa${missingUva!==1?'s':''} de Uva para o próximo kit`);
     }
-    kitTextEl.textContent = kitMsg;
+
+    if (completedKits > 0) {
+      kitTextEl.innerHTML = `
+        <div class="cart-kit-celebration">
+          <span class="cart-kit-celebration-icon">🎉</span>
+          <div>
+            <p class="cart-kit-celebration-title">${completedKits} KIT${completedKits!==1?'S':''} COM DESCONTO</p>
+            <p class="cart-kit-celebration-save">Você economizou R$ ${totalEconomy.toFixed(2).replace(".",",")} neste pedido</p>
+            ${nextHints.length ? `<p class="cart-kit-next">${nextHints.join(" · ")}</p>` : ""}
+          </div>
+        </div>`;
+    } else {
+      kitTextEl.innerHTML = `<p class="cart-kit-hint">💡 ${nextHints.join(" · ")}</p>`;
+    }
   } else {
     kitSumEl.classList.add("hidden");
   }
@@ -1592,15 +1617,28 @@ function renderCartModal() {
   // Totals
   // Recalculate fresh from cart to ensure accuracy
   const freshCalc = calcCartTotal();
-  let totalsHtml = `<div class="summary-row"><span style="color:rgba(253,246,227,.55);">Subtotal</span><span class="cinzel font-bold gold-text">R$ ${freshCalc.total.toFixed(2).replace(".",",")}</span></div>`;
-  if (freshCalc.totalBrig > 0 && freshCalc.kits > 0) {
-    const ecoB = (freshCalc.totalBrig * PRICE_UNIT) - freshCalc.brigTotal;
-    totalsHtml += `<div class="summary-row"><span style="color:#4ade80;font-size:.78rem;">Desconto kit brigadeiro</span><span style="color:#4ade80;font-size:.78rem;font-weight:700;">− R$ ${ecoB.toFixed(2).replace(".",",")}</span></div>`;
+  const ecoB = freshCalc.kits > 0
+    ? (freshCalc.totalBrig * PRICE_UNIT) - freshCalc.brigTotal : 0;
+  const ecoU = freshCalc.uvaKits > 0
+    ? (freshCalc.totalUva * UVA_PRICE_UNIT) - freshCalc.uvaTotal : 0;
+  const totalDiscount = ecoB + ecoU;
+  const subtotalBeforeDiscount = freshCalc.total + totalDiscount;
+  const fmtCart = value => `R$ ${value.toFixed(2).replace(".",",")}`;
+
+  let totalsHtml = `<div class="cart-totals-card">`;
+  totalsHtml += `<div class="summary-row"><span style="color:rgba(253,246,227,.55);">Subtotal dos produtos</span><span style="color:var(--cream);">${fmtCart(subtotalBeforeDiscount)}</span></div>`;
+  if (ecoB > 0) {
+    totalsHtml += `<div class="summary-row cart-discount-row"><span>Kit de Brigadeiros</span><span style="font-weight:700;">− ${fmtCart(ecoB)}</span></div>`;
   }
-  if (freshCalc.totalUva > 0 && freshCalc.uvaKits > 0) {
-    const ecoU = (freshCalc.totalUva * UVA_PRICE_UNIT) - freshCalc.uvaTotal;
-    totalsHtml += `<div class="summary-row"><span style="color:#4ade80;font-size:.78rem;">Desconto kit Surpresa de Uva</span><span style="color:#4ade80;font-size:.78rem;font-weight:700;">− R$ ${ecoU.toFixed(2).replace(".",",")}</span></div>`;
+  if (ecoU > 0) {
+    totalsHtml += `<div class="summary-row cart-discount-row"><span>Kit de Surpresa de Uva</span><span style="font-weight:700;">− ${fmtCart(ecoU)}</span></div>`;
   }
+  totalsHtml += `<div class="cart-total-divider"></div>`;
+  totalsHtml += `<div class="summary-row cart-total-row"><span class="cinzel font-bold" style="color:var(--gold-lt);">TOTAL</span><span class="cinzel font-bold gold-text cart-total-value">${fmtCart(freshCalc.total)}</span></div>`;
+  if (totalDiscount > 0) {
+    totalsHtml += `<p class="cart-total-saving">Economia total: ${fmtCart(totalDiscount)}</p>`;
+  }
+  totalsHtml += `</div><p class="cart-total-note">Os descontos já estão incluídos no total final</p>`;
   document.getElementById("cart-totals").innerHTML = totalsHtml;
 
   // Disable checkout if empty
